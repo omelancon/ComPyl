@@ -2,7 +2,7 @@ import Lexer
 
 
 def B(t):
-    return "YO"
+    return "B_token"
 
 
 rules = {
@@ -33,6 +33,7 @@ print "Reset"
 
 lexer.drop_buffer(drop_lineno=True)
 lexer.read(code)
+lexer.read("aaaaaabbbb")
 
 while True:
     tok = lexer.lex()
