@@ -4,12 +4,13 @@ import pickle
 
 # Brainstorm for syntax
 
-# We probably want to keep the same idea of using dicts as in the Lexer. Something like
+# We probably want to keep the same idea of using dicts as in the Lexer. Something like the following EXAMPLE
 
 
 class Node:
     def __init__(self, *args):
         self.children = args
+        self.lineno= args[0].lineno
 
 
 def A(*args):
@@ -29,6 +30,9 @@ rules = {
         "B": B
     }
 }
+
+# I'm still pondering on whether or not we should pass patterns as tuples, it seems like the natural way,
+#   since what we want is a sub-stream/array, but hashable, i.e. a n-tuple
 
 # Notice: this time we force passing functions and do not allow strings and implicitly build nodes
 #   this choice imitates most other parsers and still allows to pass a class (see the Node) as it can
@@ -65,3 +69,9 @@ class Parser:
                 patterns[pattern] = rule
 
             self.rules[expression] = patterns
+
+    def build(self):
+        pass
+
+    def export(self, filename=None):
+        pass
