@@ -1,4 +1,4 @@
-import Lexer
+from src.Lexer import Lexer
 
 
 def B(t):
@@ -42,3 +42,10 @@ while True:
         print tok
     else:
         break
+
+lexer.read("a\na")
+
+tok1 = lexer.lex()
+tok2 = lexer.lex()
+
+print tok1 == tok2

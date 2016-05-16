@@ -80,14 +80,14 @@ class Lexer:
             token = Token(rule, value, lineno=self.lineno)
 
         else:
-            # We expect rule to be a function Lexer -> string/None
+            # We expect rule to be a function Lexer-Parser -> string/None
             # if a string is returned, it is taken as the Token type
             # if None is returned, the function.__name__ is taken as Token type
 
             try:
                 token_type = rule(self)
             except TypeError:
-                raise LexerError("Lexer rules must be string or function (Lexer as argument)")
+                raise LexerError("Lexer rules must be string or function (Lexer-Parser as argument)")
 
             if isinstance(token_type, str):
                 pass
@@ -98,7 +98,7 @@ class Lexer:
 
             token = Token(token_type, value, self.lineno)
 
-        # Update the Lexer
+        # Update the Lexer-Parser
         self.pos += match.end()
 
         # TODO: change that by pre computing in add_rule phase if line_rule can match current regex
