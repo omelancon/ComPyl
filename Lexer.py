@@ -102,13 +102,11 @@ class Lexer:
         self.pos += match.end()
 
         # TODO: change that by pre computing in add_rule phase if line_rule can match current regex
+        # TODO: in other words we don't want to do this if regexs have no intersection
         if self.line_rule:
             line_rule_match = re.findall(self.line_rule, value)
 
             self.lineno += len(line_rule_match)
 
-        # We discard ignored patterns and continue to the next match
-        if ignore:
-            token = self.lex()
-
-        return token
+        # Return if a non-ignored pattern was found, else continue
+        return self.lex() if ignore else token
