@@ -11,6 +11,9 @@ class Token:
         self.value = value
         self.lineno = lineno
 
+    def __str__(self):
+        return "Token: %s, %s" % (self.type, str(self.lineno))
+
 
 class Lexer:
     def __init__(self, buffer=None, rules=None, line_rule=None):
@@ -30,15 +33,20 @@ class Lexer:
         if rules:
             self.add_rules(rules)
 
-    def read(self, buffer, drop_buffer=False):
+    def read(self, buffer):
         if not isinstance(buffer, str):
             raise ValueError("buffer must be a string")
 
-        if drop_buffer:
-            self.buffer = buffer
-            self.pos = 0
-        else:
-            self.buffer += buffer
+        self.buffer += buffer
+
+    def drop_buffer(self, drop_lineno=False):
+
+        if drop_lineno:
+            self.lineno = 1
+
+        self.pos = 0
+        self.buffer = ""
+
 
     def add_line_rule(self, line_rule):
         try:

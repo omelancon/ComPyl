@@ -18,6 +18,23 @@ while True:
     tok = lexer.lex()
 
     if tok:
-        print tok.type + " at line " + str(tok.lineno) + " with match " + tok.value.strip()
+        print tok
+    else:
+        break
+
+print "Done"
+
+print lexer.lex()
+
+print "Reset"
+
+lexer.drop_buffer(drop_lineno=True)
+lexer.read(code)
+
+while True:
+    tok = lexer.lex()
+
+    if tok:
+        print tok
     else:
         break
