@@ -15,7 +15,14 @@ class Token:
         return "<Token %s> line %s" % (self.type, str(self.lineno))
 
     def __eq__(self, other):
-        return self.type == other.type
+        if isinstance(other, str):
+            return self.type == other
+
+        elif isinstance(other, Token):
+            return self.type == other.type
+
+        else:
+            return NotImplemented
 
 
 class Lexer:
