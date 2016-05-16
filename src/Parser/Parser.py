@@ -1,3 +1,7 @@
+import copy
+import pickle
+
+
 # Brainstorm for syntax
 
 # We probably want to keep the same idea of using dicts as in the Lexer. Something like
@@ -36,3 +40,28 @@ rules = {
 
 # We then want to generate a PDA, and have a .export() function to store it in a file
 # It seems pretty obvious that we want to use an underlying dict to build the PDA
+
+class ParserException(Exception):
+    pass
+
+
+class Parser:
+    def __init__(self, lexer=None, rules=None):
+        self.lexer = None
+        self.rules = {}
+
+        if rules:
+            self.add_rules(rules)
+
+        if lexer:
+            self.lexer = copy.copy(lexer)
+
+    def add_rules(self, rules):
+        for expression, pattern_rules in rules.items():
+
+            patterns = {}
+
+            for pattern, rule in pattern_rules.items():
+                patterns[pattern] = rule
+
+            self.rules[expression] = patterns

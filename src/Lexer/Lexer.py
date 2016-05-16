@@ -43,13 +43,31 @@ class Lexer:
         if rules:
             self.add_rules(rules)
 
+    def __copy__(self):
+        """
+        Copy the lexer with its rules
+        """
+        return Lexer(rules=self.rules, line_rule=self.line_rule)
+
+    def __deepcopy__(self, memo):
+        """
+        Copy the lexer with its rules and state
+        """
+        dup = Lexer(buffer=self.buffer,
+                    rules=self.rules,
+                    line_rule=self.line_rule)
+        dup.lineno = self.lineno
+        dup.pos = self.pos
+
+        return dup
+
     def read(self, buffer):
         if not isinstance(buffer, str):
             raise LexerError("buffer must be a string")
 
         self.buffer += buffer
 
-    def drop_buffer(self, drop_lineno=False):
+    def drop_buffer(self, drop_lineno=True):
 
         if drop_lineno:
             self.lineno = 1
