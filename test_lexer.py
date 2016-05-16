@@ -1,16 +1,19 @@
 import Lexer
 
-def B():
-    return
+
+def B(t):
+    return "YO"
+
 
 rules = {
     'a+(\n)*': "A",
-    'b+': "B"
+    'b+': B,
+    '#+': None
 }
 
 lexer = Lexer.Lexer(rules=rules, line_rule='\n')
 
-code = "aaaa\n\naabbbbbaabaaaabbbbbbbbaa\naababababaaaaba\nbba\n"
+code = "aaaa\n\naabbbbb\naabaa##a#abbbbbbbbaa\na#ababababaaaa#ba\nbba\nb#\n"
 
 lexer.read(code)
 
