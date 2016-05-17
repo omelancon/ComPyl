@@ -6,6 +6,9 @@ class LexerError(Exception):
 
 
 class Token:
+    """
+    Basic token built by the lexer
+    """
     def __init__(self, type, value, lineno=None):
         self.type = type
         self.value = value
@@ -26,6 +29,29 @@ class Token:
 
 
 class Lexer:
+    """
+    Dynamic lexer, tokenize a string given a set of rules with the re library.
+
+    Rules must be provided to Lexer.add_rules as a dictionary which keys are regular expressions and values are
+    string/function/None.
+    If a rule is given as string, the Lexer returns a token with the string as type.
+    If a rule is given as function, the Lexer calls the function on self and takes the return value as token type, this
+    allows mainly to increment lines manually or do change to the Lexer. In particular, rules are dynamic and can be
+    added/removed/overwritten during the lexing.
+    If None is given as rule, the Lexer interprets the regular expression as a pattern to ignore (in practice this
+    is mostly for spaces, comments, etc.)
+
+    As stated above, a function can be passed as rule to increment Lexer.lineno, although this is not the correct way
+    to do line incrementation. Lexer has a line_rule attribute which can be set with Lexer.set_line_rule, this will
+    automatically increment line number when the pattern is encountered. In particular, this will increment Lexer.lineno
+    even if the pattern is encountered inside another pattern (a multi-line comments for say).
+
+    Lexer.read appends a string to the current buffer
+
+    Lexer.drop_old_buffer drops the part of the buffer read already
+
+    Lexer.lex reads the Lexer.buffer and returns a Token or None if it reached the end of the buffer
+    """
     def __init__(self, buffer=None, rules=None, line_rule=None):
 
         self.lineno = 1
@@ -51,7 +77,7 @@ class Lexer:
 
     def __deepcopy__(self, memo):
         """
-        Copy the lexer with its rules and state
+        Copy the lexer with its rules and current state
         """
         dup = Lexer(buffer=self.buffer,
                     rules=self.rules,
@@ -67,13 +93,9 @@ class Lexer:
 
         self.buffer += buffer
 
-    def drop_buffer(self, drop_lineno=True):
-
-        if drop_lineno:
-            self.lineno = 1
-
+    def drop_old_buffer(self):
+        self.buffer = self.buffer[self.pos:]
         self.pos = 0
-        self.buffer = ""
 
     def set_line_rule(self, line_rule):
         self.line_rule = line_rule
@@ -121,7 +143,7 @@ class Lexer:
             else:
                 raise LexerError("Lexer rules functions must return string or None")
 
-            token = Token(token_type, value, self.lineno)
+            token = Token(token_type, value, lineno=self.lineno)
 
         # Update the Lexer-Parser
         self.pos += match.end()
