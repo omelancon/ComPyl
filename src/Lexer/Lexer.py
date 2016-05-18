@@ -32,13 +32,13 @@ class Lexer:
     """
     Dynamic lexer, tokenize a string given a set of rules with the re library.
 
-    Rules must be provided to Lexer.add_rules as a dictionary which keys are regular expressions and values are
-    string/function/None.
+    Rules must be provided to Lexer.add_rules as a list of tuple (regex, rule) which first element is a regular
+    expressions and second element is a string/function/None.
     If a rule is given as string, the Lexer returns a token with the string as type.
     If a rule is given as function, the Lexer calls the function on self and takes the return value as token type, this
     allows mainly to increment lines manually or do change to the Lexer. In particular, rules are dynamic and can be
     added/removed/overwritten during the lexing.
-    If None is given as rule, the Lexer interprets the regular expression as a pattern to ignore (in practice this
+    If None is given as rule, the Lexer interprets the regular expression as a pattern to be ignored (in practice this
     is mostly for spaces, comments, etc.)
 
     As stated above, a function can be passed as rule to increment Lexer.lineno, although this is not the correct way
@@ -57,7 +57,7 @@ class Lexer:
         self.lineno = 1
         self.pos = 0
         self.buffer = ""
-        self.rules = {}
+        self.rules = []
         self.line_rule = None
 
         if buffer:
@@ -99,22 +99,32 @@ class Lexer:
 
     def set_line_rule(self, line_rule):
         self.line_rule = line_rule
-        self.add_rules({line_rule: None})
+        self.add_rules([(line_rule, None)])
 
     def add_rules(self, rules):
-        # Use items() for Python3 compatibility
-        for regex, rule in rules.items():
-            self.rules[regex] = rule
+        for regex, rule in rules:
+            self.rules.append((regex, rule))
 
     def lex(self):
         if not self.buffer[self.pos:]:
             return None
 
-        for regex, rule in self.rules.items():
-            match = re.match(regex, self.buffer[self.pos:])
-            if match:
-                break
-        else:
+        best_end = 0
+        match = None
+        rule = None
+
+        for (regex, match_rule) in self.rules:
+            current_match = re.match(regex, self.buffer[self.pos:])
+            if current_match:
+
+                current_end = current_match.end()
+
+                if current_end > best_end:
+                    match = current_match
+                    rule = match_rule
+                    best_end = current_end
+
+        if not match:
             raise LexerError("Syntax error at line %s" % self.lineno)
 
         value = match.group()
