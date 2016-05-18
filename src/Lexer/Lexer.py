@@ -113,6 +113,7 @@ class Lexer:
         match = None
         rule = None
 
+        # TODO: There probably is a better way to do this, by building a table
         for (regex, match_rule) in self.rules:
             current_match = re.match(regex, self.buffer[self.pos:])
             if current_match:
@@ -159,7 +160,7 @@ class Lexer:
         self.pos += match.end()
 
         # TODO: change that by pre computing in add_rule phase if line_rule can match current regex
-        # TODO: in other words we don't want to do this if regexs have no intersection
+        # TODO: in other words we don't want to do this if regexps have no intersection
         if self.line_rule:
             line_rule_match = re.findall(self.line_rule, value)
 
