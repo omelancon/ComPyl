@@ -1,4 +1,5 @@
 import re
+import pickle
 
 
 class LexerError(Exception):

@@ -21,6 +21,7 @@ def A(*args):
 def B(*args):
     return Node(args)
 
+
 rules = {
     "many_A": {
         ("A", "A", "A"): A,
@@ -30,6 +31,8 @@ rules = {
         "B": B
     }
 }
+
+parser = Parser(rules=rules)
 
 # I'm still pondering on whether or not we should pass patterns as tuples, it seems like the natural way,
 #   since what we want is a sub-stream/array, but hashable, i.e. a n-tuple
@@ -47,6 +50,13 @@ rules = {
 
 class ParserException(Exception):
     pass
+
+
+class PDAState:
+    def __init__(self, token=None):
+        self.token = token
+        self.shifts = {}
+        self.reduce = None
 
 
 class Parser:
@@ -71,7 +81,18 @@ class Parser:
             self.rules[expression] = patterns
 
     def build(self):
-        pass
+        self.states = {}
+        instructions_queue = []
+
+        for expression, pattern_rules in self.rules.items():
+            for pattern, rule in pattern_rules.items():
+
+                # Take note of the shift rule
+                for i in range(len(pattern)):
+                    pass
+
 
     def export(self, filename=None):
         pass
+
+# Is it really useful to build and export separately? We are never going to just build and not want to save...
