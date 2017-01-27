@@ -1,6 +1,8 @@
 import re
 import pickle
 
+from ..FiniteAutomata.FiniteAutomata import LexerAutomata, NodeIsNotTerminalState
+
 
 class LexerError(Exception):
     pass
@@ -60,6 +62,8 @@ class Lexer:
         self.buffer = ""
         self.rules = []
         self.line_rule = None
+        self.fsa = LexerAutomata()
+        self.current_state = self.fsa
 
         if buffer:
             self.read(buffer)
@@ -106,45 +110,63 @@ class Lexer:
         for regex, rule in rules:
             self.rules.append((regex, rule))
 
+    def build(self):
+        self.fsa.build(self.rules)
+
     def lex(self):
-        if not self.buffer[self.pos:]:
+        try:
+            _ = self.buffer[self.pos]
+        except IndexError:
             return None
 
-        best_end = 0
-        match = None
-        rule = None
+        # Start at empty state of FSA
+        self.current_state = self.fsa
 
-        # TODO: There probably is a better way to do this, by building a table
-        for (regex, match_rule) in self.rules:
-            current_match = re.match(regex, self.buffer[self.pos:])
-            if current_match:
+        init_pos = self.pos
+        terminal_token = None
 
-                current_end = current_match.end()
+        # Step through the Finite State Automaton
+        while True:
+            try:
+                lookout = self.buffer[self.pos]
+                lookout_state = self.current_state.recover_lookout(lookout)
+            except IndexError:
+                # End of buffer
+                lookout_state = None
 
-                if current_end > best_end:
-                    match = current_match
-                    rule = match_rule
-                    best_end = current_end
+            if lookout_state is None:
+                try:
+                    terminal_token = self.current_state.get_terminal_token()
+                except NodeIsNotTerminalState:
+                    raise LexerError("Syntax error at line %s" % self.lineno)
 
-        if not match:
-            raise LexerError("Syntax error at line %s" % self.lineno)
+                break
 
-        value = match.group()
+            self.current_state = lookout_state
+            self.pos += 1
+
+        # Exited the FSA, a terminal instruction was given
+
+        # value is later used to increment line number and is returned in the Token
+        value = self.buffer[init_pos:self.pos]
         ignore = False
 
-        if rule is None:
+        # A None terminal token represents an ignored state
+        if terminal_token is None:
             ignore = True
 
-        elif isinstance(rule, str):
-            token = Token(rule, value, lineno=self.lineno)
+        elif isinstance(terminal_token, str):
+            # Case where the terminal token is not a function, but the token name as string
+            token = Token(terminal_token, value, lineno=self.lineno)
 
         else:
+            # Case where the terminal token is a function to be called
             # We expect rule to be a function Lexer-Parser -> string/None
             # if a string is returned, it is taken as the Token type
-            # if None is returned, the function.__name__ is taken as Token type
+            # if None is returned, it is interpreted as an ignored sequence
 
             try:
-                token_type = rule(self)
+                token_type = terminal_token(self)
             except TypeError:
                 raise LexerError("Lexer rules must be string or function (Lexer-Parser as argument)")
 
@@ -157,15 +179,11 @@ class Lexer:
 
             token = Token(token_type, value, lineno=self.lineno)
 
-        # Update the Lexer-Parser
-        self.pos += match.end()
+            # Auto-increment the line number by checking if line_rule match in the match
+            if self.line_rule:
+                line_rule_match = re.findall(self.line_rule, value)
 
-        # TODO: change that by pre computing in add_rule phase if line_rule can match current regex
-        # TODO: in other words we don't want to do this if regexps have no intersection
-        if self.line_rule:
-            line_rule_match = re.findall(self.line_rule, value)
+                self.lineno += len(line_rule_match)
 
-            self.lineno += len(line_rule_match)
-
-        # Return if a non-ignored pattern was found, else continue
+        # Return if a non-ignored pattern was found, else continue lexing until a token is found
         return self.lex() if ignore else token
