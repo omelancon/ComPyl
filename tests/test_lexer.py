@@ -1,17 +1,15 @@
 from src.Lexer import Lexer
-
+from src.Visual import visual_lexer
 
 def B(t):
     return "B_token"
 
 rules = [
-    ("for", "FOR"),
-    ("while", "WHILE"),
-    (" ", None),
-    ("hello", "ID")
+    ("[af]*j", "A"),
+    ("bca", "B")
 ]
 
-code = "for while hello for"
+code = "ajajbcaajbcaaj"
 
 lexer = Lexer.Lexer(rules=rules, line_rule='\n')
 
@@ -26,3 +24,5 @@ while True:
         print token
     else:
         break
+
+visual_lexer.plot_lexer_automata(lexer.fsa)
