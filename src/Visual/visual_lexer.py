@@ -1,5 +1,6 @@
 import networkx
 import matplotlib.pyplot as pyplot
+from networkx.drawing.nx_agraph import write_dot
 
 
 def plot_lexer_automata(fsa):
@@ -32,22 +33,45 @@ def plot_lexer_automata(fsa):
     relabel = {}
     unique_id = 0
     for node in nodes:
+        str_unique_id = str(unique_id)
+
         if node.current_state == "":
-            relabel[id(node)] = "State " + str(unique_id) + ": E"
+            label = "START"
         elif node.current_state == -1:
-            relabel[id(node)] = "State " + str(unique_id) + ": e"
+            label = "EMPTY"
         else:
-            relabel[id(node)] = "State " + str(unique_id) + ": '" + chr(node.current_state) + "'"
+            label = "'" + chr(node.current_state) + "'"
+
+        if label != "START":
+            label = "N" + str_unique_id + ": " + label
+
+            if node.terminal_token:
+                if isinstance(node.terminal_token, str):
+                    label += "\n" + node.terminal_token
+                elif hasattr(node.terminal_token, '__call__'):
+                    label += "\nfn: " + node.terminal_token.__name__
+                else:
+                    label += "\n" + "IGNORED"
+
+        relabel[id(node)] = label
 
         unique_id += 1
 
     graph = networkx.relabel_nodes(graph, relabel)
 
-    networkx.draw(graph, pos=hierarchy_pos(graph), with_labels=True)
+    # Change color of nodes with self loops so they are visible with Networkx
+    # TODO: Update the drawing to used Graphviz and have actual self loops
+    loops = graph.nodes_with_selfloops()
+    colors = {node: 'r' for node in loops}
+
+    color_map = [colors.get(node, 'b') for node in graph.nodes()]
+
+    networkx.draw(graph, pos=hierarchy_pos(graph, "START"), with_labels=True, node_color=color_map)
     pyplot.savefig("visual_lexer.png")
 
 
 ###################
+# http://stackoverflow.com/questions/29586520/can-one-get-hierarchical-graphs-from-networkx-with-python-3
 
 def hierarchy_pos(G, root, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5 ):
     '''If there is a cycle that is reachable from root, then result will not be a hierarchy.
@@ -69,8 +93,6 @@ def hierarchy_pos(G, root, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5
             else:
                 pos[root] = (xcenter, vert_loc)
             neighbors = G.neighbors(root)
-            if parent != None:
-                neighbors.remove(parent)
             if len(neighbors)!=0:
                 dx = width/len(neighbors)
                 nextx = xcenter - width/2 - dx/2
