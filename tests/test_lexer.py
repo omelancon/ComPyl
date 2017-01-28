@@ -1,17 +1,18 @@
 from src.Lexer import Lexer
 from src.Visual import visual_lexer
 
-def B(t):
+def B(t, value):
     return "B_token"
 
 rules = [
     ("[af]*j", "A"),
-    ("bca", "B")
+    ("bca", B),
+    (" ", None)
 ]
 
-code = "ajajbcaajbcaaj"
+code = "ajajbcaajbcaaj\n\najfjbca"
 
-lexer = Lexer.Lexer(rules=rules, line_rule='\n')
+lexer = Lexer.Lexer(rules=rules, line_rule="\n")
 
 lexer.build()
 
@@ -22,6 +23,7 @@ while True:
 
     if token:
         print token
+        print token.value
     else:
         break
 

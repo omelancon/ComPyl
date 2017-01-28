@@ -33,14 +33,13 @@ class Token:
 
 class Lexer:
     """
-    Dynamic lexer, tokenize a string given a set of rules with the re library.
+    Tokenize a string given a set of rules by building a FiniteAutomata.
 
     Rules must be provided to Lexer.add_rules as a list of tuple (regex, rule) which first element is a regular
     expressions and second element is a string/function/None.
-    If a rule is given as string, the Lexer returns a token with the string as type.
-    If a rule is given as function, the Lexer calls the function on self and takes the return value as token type, this
-    allows mainly to increment lines manually or do change to the Lexer. In particular, rules are dynamic and can be
-    added/removed/overwritten during the lexing.
+    If a rule is given as string, the Lexer returns a token with the string as token type.
+    If a rule is given as function, the Lexer calls the function with Lexer and matched pattern as arguments
+    and takes return value as token type, this allows mainly to increment lines manually or do change to the Lexer.
     If None is given as rule, the Lexer interprets the regular expression as a pattern to be ignored (in practice this
     is mostly for spaces, comments, etc.)
 
@@ -63,7 +62,7 @@ class Lexer:
         self.rules = []
         self.line_rule = None
         self.fsa = LexerAutomata()
-        self.current_state = self.fsa
+        self.current_state = None
 
         if buffer:
             self.read(buffer)
@@ -84,6 +83,7 @@ class Lexer:
         """
         Copy the lexer with its rules and current state
         """
+        # TODO: Copy the FSA
         dup = Lexer(buffer=self.buffer,
                     rules=self.rules,
                     line_rule=self.line_rule)
@@ -147,7 +147,7 @@ class Lexer:
 
         # Exited the FSA, a terminal instruction was given
 
-        # value is later used to increment line number and is returned in the Token
+        # value is later used to increment line number if a line_rule was set, also returned in the Token
         value = self.buffer[init_pos:self.pos]
         ignore = False
 
@@ -166,9 +166,9 @@ class Lexer:
             # if None is returned, it is interpreted as an ignored sequence
 
             try:
-                token_type = terminal_token(self)
+                token_type = terminal_token(self, value)
             except TypeError:
-                raise LexerError("Lexer rules must be string or function (Lexer-Parser as argument)")
+                raise LexerError("Lexer rules must be string or function (Lexer-Parser, value (string) as arguments)")
 
             if isinstance(token_type, str):
                 pass
@@ -179,11 +179,13 @@ class Lexer:
 
             token = Token(token_type, value, lineno=self.lineno)
 
-            # Auto-increment the line number by checking if line_rule match in the match
-            if self.line_rule:
-                line_rule_match = re.findall(self.line_rule, value)
+        # Auto-increment the line number by checking if line_rule match in the match
+        # TODO: This makes the lexer a 2 pass lexer, we could improve that by precomputing if linerule and current
+        # TODO: rule intersect
+        if self.line_rule:
+            line_rule_match = re.findall(self.line_rule, value)
 
-                self.lineno += len(line_rule_match)
+            self.lineno += len(line_rule_match)
 
         # Return if a non-ignored pattern was found, else continue lexing until a token is found
         return self.lex() if ignore else token

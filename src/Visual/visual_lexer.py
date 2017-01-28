@@ -35,7 +35,7 @@ def plot_lexer_automata(fsa):
     for node in nodes:
         str_unique_id = str(unique_id)
 
-        if node.current_state == "":
+        if node.current_state == None:
             label = "START"
         elif node.current_state == -1:
             label = "EMPTY"
@@ -62,9 +62,9 @@ def plot_lexer_automata(fsa):
     # Change color of nodes with self loops so they are visible with Networkx
     # TODO: Update the drawing to used Graphviz and have actual self loops
     loops = graph.nodes_with_selfloops()
-    colors = {node: 'r' for node in loops}
+    colors = {node: 'r' if node in loops else 'b' for node in graph.nodes()}
 
-    color_map = [colors.get(node, 'b') for node in graph.nodes()]
+    color_map = [colors.get(node) for node in graph.nodes()]
 
     networkx.draw(graph, pos=hierarchy_pos(graph, "START"), with_labels=True, node_color=color_map)
     pyplot.savefig("visual_lexer.png")
