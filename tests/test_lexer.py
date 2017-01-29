@@ -5,12 +5,19 @@ def B(t, value):
     return "B_token"
 
 rules = [
-    ("[af]*j", "A"),
-    ("bca", B),
-    (" ", None)
+    (" ", None),
+    ("je", "sujet"),
+    ("tu", "sujet"),
+    ("suis", "verbe"),
+    ("es", "verbe"),
+    ("est", "verbe"),
+    ("content", "adjectif"),
+    ("heureux", "adjectif"),
+    (",", "ponctuation")
 ]
 
-code = "ajajbcaajbcaaj\n\najfjbca"
+code = """je suis content, es tu content
+tu es heureux"""
 
 lexer = Lexer.Lexer(rules=rules, line_rule="\n")
 
@@ -23,7 +30,6 @@ while True:
 
     if token:
         print token
-        print token.value
     else:
         break
 

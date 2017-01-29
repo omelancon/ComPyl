@@ -148,12 +148,40 @@ class LexerAutomata(FiniteAutomata):
 
             # 1) Case n to inf
             if min_repeat > 0 and max_repeat > self.max_repeat_handled:
-                pass
+
+                # Generate the nodes chain forcing at least n repetitions
+                count = 1
+                node_layer = [self]
+
+                while count <= min_repeat:
+
+                    new_layer = []
+
+                    for node in node_layer:
+
+                        for formated_lookout in formated_lookouts:
+
+                            if not node.lookout_exists(formated_lookout):
+                                node.next_states[formated_lookout] = automata_class(formated_lookout)
+
+                            new_layer.append(node.next_states[formated_lookout])
+
+                    node_layer = new_layer
+
+                # Due to infinite repetition, link the final layer of nodes between themselves
+                for node in node_layer:
+                    for target in node_layer:
+                        if not node.lookout_exists(target.current_state):
+                            node.next_states[target.current_state] = target
+
+                next_states = node_layer
 
             # 2) Case 0 to inf
             if min_repeat == 0 and max_repeat > self.max_repeat_handled:
+                # Since 0 repetition is legal, we link self to self
                 nodes_to_loop = [self]
 
+                # Generate the nodes corresponding to the lookouts
                 for formated_lookout in formated_lookouts:
 
                     lookout_is_current_state = (self.current_state == formated_lookout)
@@ -164,6 +192,7 @@ class LexerAutomata(FiniteAutomata):
                     if not lookout_is_current_state:
                         nodes_to_loop.append(self.recover_lookout(formated_lookout))
 
+                # Due to infinite repetition, link all the created nodes
                 for node in nodes_to_loop:
                     for target in nodes_to_loop:
                         if not node.lookout_exists(target.current_state):
@@ -171,6 +200,7 @@ class LexerAutomata(FiniteAutomata):
 
                 next_states = nodes_to_loop
 
+                # Add self loop to each node, including the starting one to allow match with empty string
                 for state in nodes_to_loop:
 
                     # -1 is the empty string
@@ -185,45 +215,11 @@ class LexerAutomata(FiniteAutomata):
             # 3) Case n to m
             # TODO: Check
             if min_repeat > 0 and max_repeat <= self.max_repeat_handled:
-                current_states = [self]
-
-                while max_repeat >= min_repeat:
-
-                    next_states = []
-
-                    for state in current_states:
-                        for formated_lookout in formated_lookouts:
-
-                            if state.lookout_exists(formated_lookout):
-                                next_states.append(state.recover_lookout(formated_lookout))
-
-                            else:
-                                new_state = automata_class(formated_lookout)
-                                state.next_states[formated_lookout] = new_state
-                                next_states.append(new_state)
-
-                    current_states = next_states
-                    max_repeat -= 1
+                pass
 
             # 4) Case 0 to m
             if min_repeat == 0 and max_repeat <= self.max_repeat_handled:
                 pass
-
-            # Case where empty string is accepted
-            if min_repeat == 0:
-
-                next_states = []
-
-                for state in current_states:
-
-                    # -1 is the empty string
-                    if state.lookout_exists(-1):
-                        next_states.append(state.recover_lookout(-1))
-
-                    else:
-                        new_state = automata_class(-1)
-                        state.next_states[-1] = new_state
-                        next_states.append(new_state)
 
         # Adding a single layer of states, no repetition involved
         else:
