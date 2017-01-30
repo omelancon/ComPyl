@@ -5,23 +5,16 @@ def B(t, value):
     return "B_token"
 
 rules = [
-    (" ", None),
-    ("je", "sujet"),
-    ("tu", "sujet"),
-    ("suis", "verbe"),
-    ("es", "verbe"),
-    ("est", "verbe"),
-    ("content", "adjectif"),
-    ("heureux", "adjectif"),
-    (",", "ponctuation")
+    ("[cd]{2,1000}", "Accept"),
 ]
 
-code = """je suis content, es tu content
-tu es heureux"""
+code = "cda"
 
-lexer = Lexer.Lexer(rules=rules, line_rule="\n")
+lexer = Lexer.Lexer(rules=rules)
 
 lexer.build()
+
+visual_lexer.plot_lexer_automata(lexer.fsa)
 
 lexer.read(code)
 
@@ -32,5 +25,3 @@ while True:
         print token
     else:
         break
-
-visual_lexer.plot_lexer_automata(lexer.fsa)

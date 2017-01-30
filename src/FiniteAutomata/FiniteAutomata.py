@@ -155,18 +155,17 @@ class LexerAutomata(FiniteAutomata):
 
                 while count <= min_repeat:
 
-                    new_layer = []
+                    lookout_nodes = {lookout: automata_class(lookout) for lookout in formated_lookouts}
 
                     for node in node_layer:
 
                         for formated_lookout in formated_lookouts:
 
                             if not node.lookout_exists(formated_lookout):
-                                node.next_states[formated_lookout] = automata_class(formated_lookout)
+                                node.next_states[formated_lookout] = lookout_nodes[formated_lookout]
 
-                            new_layer.append(node.next_states[formated_lookout])
-
-                    node_layer = new_layer
+                    node_layer = lookout_nodes.values()
+                    count += 1
 
                 # Due to infinite repetition, link the final layer of nodes between themselves
                 for node in node_layer:
@@ -178,19 +177,22 @@ class LexerAutomata(FiniteAutomata):
 
             # 2) Case 0 to inf
             if min_repeat == 0 and max_repeat > self.max_repeat_handled:
-                # Since 0 repetition is legal, we link self to self
-                nodes_to_loop = [self]
+
+                # Since zero occurrence is accepted, we link self to self
+                if not self.lookout_exists(-1):
+                    self.next_states[-1] = self
 
                 # Generate the nodes corresponding to the lookouts
+                nodes_to_loop = []
+
                 for formated_lookout in formated_lookouts:
 
-                    lookout_is_current_state = (self.current_state == formated_lookout)
+                    lookout_nodes = {lookout: automata_class(lookout) for lookout in formated_lookouts}
 
-                    if not self.lookout_exists(formated_lookout) and not lookout_is_current_state:
-                        self.next_states[formated_lookout] = automata_class(formated_lookout)
+                    if not self.lookout_exists(formated_lookout):
+                        self.next_states[formated_lookout] = lookout_nodes[formated_lookout]
 
-                    if not lookout_is_current_state:
-                        nodes_to_loop.append(self.recover_lookout(formated_lookout))
+                    nodes_to_loop.append(lookout_nodes[formated_lookout])
 
                 # Due to infinite repetition, link all the created nodes
                 for node in nodes_to_loop:
@@ -198,28 +200,75 @@ class LexerAutomata(FiniteAutomata):
                         if not node.lookout_exists(target.current_state):
                             node.next_states[target.current_state] = target
 
-                next_states = nodes_to_loop
-
-                # Add self loop to each node, including the starting one to allow match with empty string
-                for state in nodes_to_loop:
-
-                    # -1 is the empty string
-                    if state.lookout_exists(-1):
-                        next_states.append(state.recover_lookout(-1))
-
-                    else:
-                        new_state = automata_class(-1)
-                        state.next_states[-1] = new_state
-                        next_states.append(new_state)
+                next_states = [node for node in nodes_to_loop] + [self]
 
             # 3) Case n to m
-            # TODO: Check
             if min_repeat > 0 and max_repeat <= self.max_repeat_handled:
-                pass
+
+                # Generate the nodes chain forcing at least n repetitions
+                count = 1
+                node_layer = [self]
+
+                while count <= min_repeat:
+
+                    lookout_nodes = {lookout : automata_class(lookout) for lookout in formated_lookouts}
+
+                    for node in node_layer:
+
+                        for formated_lookout in formated_lookouts:
+
+                            if not node.lookout_exists(formated_lookout):
+                                node.next_states[formated_lookout] = lookout_nodes[formated_lookout]
+
+                    node_layer = lookout_nodes.values()
+                    count += 1
+
+                terminal_layers = node_layer
+
+                # Generate the remaining chain (depth n to m) and remember them as they will be returned as terminal
+                while count <= max_repeat:
+
+                    lookout_nodes = {lookout : automata_class(lookout) for lookout in formated_lookouts}
+
+                    for node in node_layer:
+
+                        for formated_lookout in formated_lookouts:
+
+                            if not node.lookout_exists(formated_lookout):
+                                node.next_states[formated_lookout] = lookout_nodes[formated_lookout]
+
+                    terminal_layers.extend(lookout_nodes.values())
+                    node_layer = lookout_nodes.values()
+                    count += 1
+
+                next_states = terminal_layers
 
             # 4) Case 0 to m
             if min_repeat == 0 and max_repeat <= self.max_repeat_handled:
-                pass
+
+                # Since zero occurrence is accepted, we link self to self
+                if not self.lookout_exists(-1):
+                    self.next_states[-1] = self
+
+                # Generate the remaining chain (depth m) and remember them as they will be returned as terminal
+                count = 1
+                node_layer = [self]
+                terminal_layers = [self]
+
+                while count <= max_repeat:
+
+                    lookout_nodes = {lookout : automata_class(lookout) for lookout in formated_lookouts}
+
+                    for node in node_layer:
+
+                        for formated_lookout in formated_lookouts:
+
+                            if not node.lookout_exists(formated_lookout):
+                                node.next_states[formated_lookout] = lookout_nodes[formated_lookout]
+
+                    terminal_layers.extend(lookout_nodes.values())
+                    node_layer = lookout_nodes.values()
+                    count += 1
 
         # Adding a single layer of states, no repetition involved
         else:
