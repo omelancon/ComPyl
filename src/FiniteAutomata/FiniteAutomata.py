@@ -118,11 +118,29 @@ class LexerAutomata(FiniteAutomata):
 
     def add_or_recover_lookout(self, lookout):
         """
-        Return the states corresponding to the lookout, creating them if they don't exist
+        Given a lookout, recover the corresponding states of the FSA, creating them if they do not exist.
+
+        Since some lookout will be given as 'max_repeat' rse token, we might traverse/generate chains of states. ex:
+
+             State 97 -> ...
+        S -> State 98 -> ... -> State 110
+             State 99 -> ... -> State 111
+
+        The function returns a tuple.
+        1) The first element of the tuple is a list of tuples (int, node) representing the first layer of nodes from
+           the chain preceded by the lookout to attain it. In the above example the corresponding list would be:
+           [(97, State 97), (98, State 98), (99, State 99)]
+        2) The second element is the list of terminal nodes of the chain. In the above example, it would be:
+           [State 110, State 111]
+
+        Note: if the node S loops to itself, it will be contained in the first list.
+        Note 2: If the returned chain is of length 1, then the two list will correspond to the same set of states
+
 
         The 'lookout' is stored as int (ascii) in the nodes but can be given as string or rse token
         """
 
+        first_states = None
         next_states = []
         current_states = [self]
 
@@ -178,9 +196,12 @@ class LexerAutomata(FiniteAutomata):
             # 2) Case 0 to inf
             if min_repeat == 0 and max_repeat > self.max_repeat_handled:
 
-                # Since zero occurrence is accepted, we link self to self
+                # Add node corresponding to empty string
                 if not self.lookout_exists(-1):
-                    self.next_states[-1] = self
+                    empty_state = automata_class(-1)
+                    self.next_states[-1] = empty_state
+                else:
+                    empty_state = self.next_states[-1]
 
                 # Generate the nodes corresponding to the lookouts
                 nodes_to_loop = []
@@ -200,7 +221,7 @@ class LexerAutomata(FiniteAutomata):
                         if not node.lookout_exists(target.current_state):
                             node.next_states[target.current_state] = target
 
-                next_states = [node for node in nodes_to_loop] + [self]
+                next_states = [node for node in nodes_to_loop] + [empty_state]
 
             # 3) Case n to m
             if min_repeat > 0 and max_repeat <= self.max_repeat_handled:
@@ -246,14 +267,17 @@ class LexerAutomata(FiniteAutomata):
             # 4) Case 0 to m
             if min_repeat == 0 and max_repeat <= self.max_repeat_handled:
 
-                # Since zero occurrence is accepted, we link self to self
+                # Add node corresponding to empty string
                 if not self.lookout_exists(-1):
-                    self.next_states[-1] = self
+                    empty_state = automata_class(-1)
+                    self.next_states[-1] = empty_state
+                else:
+                    empty_state = self.next_states[-1]
 
                 # Generate the remaining chain (depth m) and remember them as they will be returned as terminal
                 count = 1
-                node_layer = [self]
-                terminal_layers = [self]
+                node_layer = [self, empty_state]
+                terminal_layers = []
 
                 while count <= max_repeat:
 
@@ -269,6 +293,8 @@ class LexerAutomata(FiniteAutomata):
                     terminal_layers.extend(lookout_nodes.values())
                     node_layer = lookout_nodes.values()
                     count += 1
+
+                next_states = terminal_layers
 
         # Adding a single layer of states, no repetition involved
         else:

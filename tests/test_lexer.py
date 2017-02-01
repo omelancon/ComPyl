@@ -5,21 +5,26 @@ def B(t, value):
     return "B_token"
 
 rules = [
-    ("[cd]{2,1000}", "Accept"),
+    ("a+bcd", "Accept"),
+    ("abc", "Good")
 ]
 
-code = "cda"
+code = "bc"
 
 lexer = Lexer.Lexer(rules=rules)
 
 lexer.build()
 
-visual_lexer.plot_lexer_automata(lexer.fsa)
+lexer.save("test.p")
 
-lexer.read(code)
+loaded_lexer = Lexer.Lexer.load("test.p")
+
+visual_lexer.plot_lexer_automata(loaded_lexer.fsa)
+
+loaded_lexer.read(code)
 
 while True:
-    token = lexer.lex()
+    token = loaded_lexer.lex()
 
     if token:
         print token

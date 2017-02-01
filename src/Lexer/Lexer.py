@@ -113,6 +113,23 @@ class Lexer:
     def build(self):
         self.fsa.build(self.rules)
 
+    def save(self, filename="lexer.p"):
+        file = open(filename, "wb")
+        pickle.dump(self, file)
+
+    @staticmethod
+    def load(path):
+        try:
+            file = open(path, "rb")
+            lexer = pickle.load(file)
+        except pickle.PickleError:
+            raise LexerError("The file " + path + " cannot be loaded by pickle")
+
+        if isinstance(lexer, Lexer):
+            return lexer
+        else:
+            raise LexerError("The unpickled object from " + path + " is not a Lexer")
+
     def lex(self):
         try:
             _ = self.buffer[self.pos]
