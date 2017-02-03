@@ -1,5 +1,5 @@
-from collections import OrderedDict
 import sre_parse
+from itertools import count
 
 
 class NodeIsNotTerminalState(Exception):
@@ -23,28 +23,108 @@ class UnrecognizedLookoutFormat(Exception):
 
 
 class FiniteAutomata():
+    """
+    Basic skeleton for Deterministic and Non-deterministic Finite Automata.
+    A FiniteAutomata object is a node of the graph representation of the automata.
 
-    # Empty object to differentiate between no terminal (None) and no-instruction terminal (IGNORED)
+
+    """
+    # Counter for state id
+    _ids = count(0)
+
+    # Special lookout values
+    EMPTY = (-1, -1)
+
+    # Special terminal values
     IGNORED = object()
 
-    def __init__(self, current_state=None, terminal_token=None, max_repeat_handled=100):
-        self.current_state = current_state
-        # OrderedDict allows to keep track of the order in which states are added
-        # Giving priority to a rule given first, even though this technically an error by the user
-        self.next_states = OrderedDict()
+    # Maximum number of repetition of a same lookout handled, anything above is considered as infinite repetition
+    max_repeat_handled = 100
+
+    def __init__(self, terminal_token=None, max_repeat_handled=None):
+        self.id = self._ids.next()
+
+        # List of next states from current state.
+        # Elements of the list are tuples (lookout, next state), lookout takes the range format (min_ascii, max_ascii)
+        self.next_states = []
+
         # Terminal token is intended to be either a string or a function returning a string
         self.terminal_token = terminal_token
-        # Maximum number of repetition of a same lookout handled, anything above is considered as infinite repetition
-        self.max_repeat_handled = max_repeat_handled
+
+        # Allows to by pass the default max_repeat_handled of the class
+        if max_repeat_handled:
+            self.max_repeat_handled = max_repeat_handled
 
     def __str__(self):
-        return "<State '%s'>" % (self.current_state)
+        return "<State '%d'>" % (self.id)
 
-    def lookout_exists(self, lookout):
+    def add_transition_range(self, min_ascii, max_ascii, *args, **kwargs):
         """
-        Indicates if the character 'lookout' leads to a legal state
+        Add the edge corresponding to the transition when a character from min_ascii to max_ascii is seen.
+        For a single ascii transition, let min_ascii = max_ascii, ex: 'a' would be (97, 97)
+        Extra arguments and keyword arguments are passed to the object generator.
+
+        REMARK: in the case of a DFA, be aware that add_transition does not check for already existing transitions.
         """
-        return lookout in self.next_states
+        lookout = (min_ascii, max_ascii)
+        new_state = self.__class__(*args, **kwargs)
+        self.next_states.append((lookout, new_state))
+
+        return new_state
+
+    def add_empty_transition(self, *args, **kwargs):
+        """
+        Same ad add_transition, but for an empty string match
+        """
+        new_state = self.__class__(*args, **kwargs)
+        self.next_states.append((self.EMPTY, new_state))
+
+        return new_state
+
+    def get_transition_states_for_lookout(self, lookout):
+        """
+        Given a lookout (ascii value as int), return all the transition states attained by this lookout
+        """
+
+        states = []
+
+        for transition in self.next_states:
+            if value_is_in_range(lookout, transition[0]):
+                states.append(transition[1])
+
+        return states
+
+    def get_transition_for_empty_string(self):
+        """
+        Return transition states corresponding to the empty string
+        """
+
+        states = []
+
+        for transition in self.next_states:
+            if transition[0] == self.EMPTY:
+                states.append(transition[1])
+
+        return states
+
+    def add_transition_to_state(self, min_ascii, max_ascii, state):
+        """
+        Form an edge from the current state to a pre-existing state
+        :param max_ascii: int
+        :param min_ascii: int
+        :param state: a pre-existing node
+        :return: None
+        """
+
+        self.next_states.append(((min_ascii, max_ascii), state))
+
+    def add_empty_transition_to_state(self, state):
+        """
+        Same as add_transition_to_state but with empty string
+        :param state:
+        :return:
+        """
+        self.next_states.append((self.EMPTY, state))
 
     def set_terminal_token(self, terminal_token):
         """
@@ -88,7 +168,66 @@ class FiniteAutomata():
             raise NodeIsNotTerminalState
 
 
-class LexerAutomata(FiniteAutomata):
+class LexerNFA(FiniteAutomata):
+    def add_rule(self, regexp, token):
+        """
+        Add the given rule to the NFA.
+        See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
+        :param regexp: A parsed regexp formated as a RegexpTree object
+        :param token: the token returned by the rule (a string or a function FiniteAutomata -> string -> string)
+        :return: a tuple (first, last) where first and last are respectively the first and last nodes of the rule
+        """
+
+        if regexp is not None:
+
+            first = self.add_empty_transition()
+
+            if regexp.type == 'single':
+                min_ascii = regexp.min_ascii
+                max_ascii = regexp.max_ascii
+
+                next = first.add_transition_range(min_ascii, max_ascii)
+                last = next.add_rule(regexp.next, token)
+
+            elif regexp.type == 'union':
+                fst_branch = first.add_rule(regexp.fst, token)
+                snd_branch = first.add_rule(regexp.snd, token)
+
+                last = fst_branch[1].add_empty_transition()
+                snd_branch[1].add_empty_transition_to_state(last)
+
+            elif regexp.type == 'kleene':
+                # The regexp A* leads to the following NFA
+                #
+                # s0 ---> s1 -A-> s2 ---> s3 (ACCEPT)
+                # ^        ^------|       |
+                # |-----------------------|
+                #
+                # See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
+
+                s0, s2 = first.add_rule(regexp.pattern, token)
+                s3 = s2.add_empty_transition()
+                # There should be a unique empty transition at this point
+                s1 = s0.get_transition_for_empty_string()[0]
+
+                s2.add_empty_transition_to_state(s1)
+                s3.add_empty_transition_to_state(s0)
+
+                last = s3
+
+        else:
+            self.set_terminal_token(token)
+            first = last = self
+
+        return first, last
+
+    def build(self, rules):
+        for rule, token in rules:
+            formated_rule = None
+            self.add_rule(rule, token)
+
+
+class LexerDFA(FiniteAutomata):
     def add_rule(self, regexp, token):
         """
         Add a rule to the FSA.
@@ -344,8 +483,147 @@ class LexerAutomata(FiniteAutomata):
 
 
 # ========================================================
+# Set operations
+# ========================================================
+
+def value_is_in_range(value, range):
+    """
+    :param value: an int (x)
+    :param range: a tuple of int (min, max)
+    :return: True if x from min to max, False otherwise
+    """
+    return range[0] <= value <= range[1]
+
+
+def set_to_intervals(ascii_set):
+    """
+    Given a set of int, return a list of intervals covering those ints exactly
+    ex: the set {1,2,3,5,6,9} would be returned as [(1,3), (5,6), (9,9)]
+    """
+
+    set_size = len(ascii_set)
+
+    if set_size == 0:
+        return []
+
+    else:
+
+        ascii_list = list(ascii_set)
+        ascii_list.sort()
+
+        # Hack so the last interval in the list is added
+        ascii_list.append(float('inf'))
+
+        interval_list = []
+
+        min = max = ascii_list[0]
+
+        index = 1
+        while index < set_size:
+            ascii = ascii_list[index]
+            if ascii == max + 1:
+                max += 1
+            else:
+                interval_list.append((min, max))
+                min = max = ascii
+
+        return interval_list
+
+
+# ========================================================
 # Tokenize RegExp
 # ========================================================
+
+class RegexpTree():
+
+    def __init__(self, node_type, *values):
+
+        if node_type in ['single', 'union' 'kleene']:
+            self.type = node_type
+
+        else:
+            raise ValueError
+
+        if node_type == "single":
+            self.min_ascii = values[0]
+            self.max_ascii = values[1]
+            self.next = values[2] if len(values) > 2 else None
+
+        elif node_type == "union":
+            self.fst = values[0]
+            self.snd = values [1]
+            self.next = values[2]
+
+        elif node_type == 'kleene':
+            self.pattern = values[0]
+            self.next = values[1]
+
+def format_regexp(regexp):
+    """
+    Take a regexp as string and return the equivalent RegexpTree.
+    Use sre_parse to first tokenize the regexp, then translate it.
+    """
+
+    parsed_regexp = sre_parse.parse(regexp)
+    return sre_to_regexp_tree(parsed_regexp)
+
+def sre_to_regexp_tree(sre_regexp):
+    """
+    Take a regexp as sre_parse tokens list and return the equivalent RegexpTree.
+    """
+
+    sre_length = len(sre_regexp)
+
+    if sre_length == 0:
+        return None
+
+    else:
+        current_token = sre_regexp[0]
+        token_type = current_token[0]
+
+        if token_type == 'literal':
+            pass
+        elif token_type == 'in':
+            pass
+        elif token_type == 'range':
+            pass
+        elif token_type == 'max_repeat':
+            pass
+        elif token_type == 'branch':
+            pass
+        elif token_type == 'at':
+            pass
+
+
+
+
+
+def sre_list_to_interval(regexp_list):
+    """
+    Given a list of sre 'literal', sre 'in', sre 'range' or int, return a list of corresponding intervals of ascii
+    values.
+    """
+
+    if not isinstance(regexp_list, list):
+        regexp_list = [regexp_list]
+
+    alphabet = set()
+
+    for regexp in regexp_list:
+        for token in regexp:
+            type = token[0]
+            value = token[1]
+
+            if type == "literal":
+                alphabet.add(value)
+
+            elif type == "in":
+                alphabet |= sre_list_to_interval([value])
+
+            elif type == "range":
+                alphabet |= set(range(value[0], value[1] + 1))
+
+    return set_to_intervals(alphabet)
 
 
 def format_char_to_sre(char):

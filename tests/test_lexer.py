@@ -1,32 +1,22 @@
 from src.Lexer import Lexer
+from src.FiniteAutomata import FiniteAutomata
 from src.Visual import visual_lexer
+import sre_parse
 
 def B(t, value):
     return "B_token"
 
 rules = [
-    ("a+bcd", "Accept"),
-    ("abc", "Good")
+    ("[1-9]+bcd", "Accept"),
+    ("[a-z]bc", "Good")
 ]
 
 code = "bc"
 
 lexer = Lexer.Lexer(rules=rules)
 
-lexer.build()
+rse_regexps = [sre_parse.parse(rule[0]) for rule in rules]
 
-lexer.save("test.p")
+alphabet = FiniteAutomata.get_alphabet(rse_regexps)
 
-loaded_lexer = Lexer.Lexer.load("test.p")
-
-visual_lexer.plot_lexer_automata(loaded_lexer.fsa)
-
-loaded_lexer.read(code)
-
-while True:
-    token = loaded_lexer.lex()
-
-    if token:
-        print token
-    else:
-        break
+print [chr(a) for a in alphabet]

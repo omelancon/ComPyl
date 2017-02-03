@@ -37,7 +37,7 @@ rules = [
     ("[a-z]+", "ID")
 ]
 
-a = FiniteAutomata.LexerAutomata()
+a = FiniteAutomata.LexerDFA()
 
 a.build(rules)
 print a

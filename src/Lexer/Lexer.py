@@ -1,7 +1,7 @@
 import re
 import pickle
 
-from ..FiniteAutomata.FiniteAutomata import LexerAutomata, NodeIsNotTerminalState
+from ..FiniteAutomata.FiniteAutomata import LexerDFA, NodeIsNotTerminalState
 
 
 class LexerError(Exception):
@@ -61,7 +61,7 @@ class Lexer:
         self.buffer = ""
         self.rules = []
         self.line_rule = None
-        self.fsa = LexerAutomata()
+        self.fsa = LexerDFA()
         self.current_state = None
 
         if buffer:
