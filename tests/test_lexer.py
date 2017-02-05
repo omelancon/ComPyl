@@ -11,12 +11,6 @@ rules = [
     ("[a-z]bc", "Good")
 ]
 
-code = "bc"
+tree = FiniteAutomata.format_regexp('[1-9]+bcd|j')
 
-lexer = Lexer.Lexer(rules=rules)
-
-rse_regexps = [sre_parse.parse(rule[0]) for rule in rules]
-
-alphabet = FiniteAutomata.get_alphabet(rse_regexps)
-
-print [chr(a) for a in alphabet]
+print tree

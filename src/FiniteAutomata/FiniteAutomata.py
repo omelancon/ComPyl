@@ -41,7 +41,7 @@ class FiniteAutomata():
     # Maximum number of repetition of a same lookout handled, anything above is considered as infinite repetition
     max_repeat_handled = 100
 
-    def __init__(self, terminal_token=None, max_repeat_handled=None):
+    def __init__(self, terminal_token=None, max_handled_repeat=None):
         self.id = self._ids.next()
 
         # List of next states from current state.
@@ -52,8 +52,8 @@ class FiniteAutomata():
         self.terminal_token = terminal_token
 
         # Allows to by pass the default max_repeat_handled of the class
-        if max_repeat_handled:
-            self.max_repeat_handled = max_repeat_handled
+        if max_handled_repeat:
+            self.max_repeat_handled = max_handled_repeat
 
     def __str__(self):
         return "<State '%d'>" % (self.id)
@@ -519,13 +519,15 @@ def set_to_intervals(ascii_set):
         min = max = ascii_list[0]
 
         index = 1
-        while index < set_size:
+        while index <= set_size:
             ascii = ascii_list[index]
             if ascii == max + 1:
                 max += 1
             else:
                 interval_list.append((min, max))
                 min = max = ascii
+
+            index += 1
 
         return interval_list
 
@@ -538,7 +540,7 @@ class RegexpTree():
 
     def __init__(self, node_type, *values):
 
-        if node_type in ['single', 'union' 'kleene']:
+        if node_type in ['single', 'union', 'kleene']:
             self.type = node_type
 
         else:
@@ -558,6 +560,7 @@ class RegexpTree():
             self.pattern = values[0]
             self.next = values[1]
 
+
 def format_regexp(regexp):
     """
     Take a regexp as string and return the equivalent RegexpTree.
@@ -565,12 +568,17 @@ def format_regexp(regexp):
     """
 
     parsed_regexp = sre_parse.parse(regexp)
-    return sre_to_regexp_tree(parsed_regexp)
+    return sre_to_regexp_tree(parsed_regexp.data)
 
-def sre_to_regexp_tree(sre_regexp):
+
+def sre_to_regexp_tree(sre_regexp, max_handled_repeat = 100):
     """
     Take a regexp as sre_parse tokens list and return the equivalent RegexpTree.
     """
+
+    # Token 'branch' has SubPatterns as sub-tokens, we convert back to list for uniformity
+    if isinstance(sre_regexp, sre_parse.SubPattern):
+        sre_regexp = sre_regexp.data
 
     sre_length = len(sre_regexp)
 
@@ -578,30 +586,141 @@ def sre_to_regexp_tree(sre_regexp):
         return None
 
     else:
+
         current_token = sre_regexp[0]
+
+        # When sre_parse returned a SubPattern, extract the data
+        if isinstance(current_token, sre_parse.SubPattern):
+            current_token = current_token.data
+
+        regexp_tail = sre_regexp[1:]
         token_type = current_token[0]
 
         if token_type == 'literal':
-            pass
+            return RegexpTree('single',
+                              current_token[1],
+                              current_token[1],
+                              sre_to_regexp_tree(regexp_tail)
+                              )
+
+        # I don't think this is ever attained
+        if token_type == 'range':
+            return RegexpTree('single',
+                              current_token[1][0],
+                              current_token[1][1],
+                              sre_to_regexp_tree(regexp_tail)
+                              )
+
         elif token_type == 'in':
-            pass
-        elif token_type == 'range':
-            pass
+            return make_regexp_intervals_union(current_token, regexp_tail, max_handled_repeat=max_handled_repeat)
+
         elif token_type == 'max_repeat':
-            pass
+            token_repeated = current_token[1][2]
+
+            # In the case of 'max_repeat' tokens, sre_parse always returns current_token[1][2] as SubPattern, but
+            # we don't always do so, thus we need to normalize here
+            if isinstance(token_repeated, sre_parse.SubPattern):
+                token_repeated = token_repeated.data
+
+            min = current_token[1][0]
+            max = current_token[1][1]
+
+            if min > 0:
+                extension = min * token_repeated + [('max_repeat', (0, max, token_repeated))] + regexp_tail
+                return sre_to_regexp_tree(
+                        extension,
+                        max_handled_repeat=max_handled_repeat
+                    )
+            elif 1 <= max <= max_handled_repeat:
+                branch_token = ('branch',
+                                (None,
+                                 [('max_repeat', (0, max - 1))],
+                                 [token_repeated, ('max_repeat', (0, max - 1))
+                                  ])
+                                )
+                return sre_to_regexp_tree(
+                    [branch_token] + regexp_tail,
+                    max_handled_repeat=max_handled_repeat
+                )
+
+            elif max == 0:
+                return None
+
+            # Case where min = 0, max = inf, i.e. a Kleene operator
+            else:
+                return RegexpTree(
+                    'kleene',
+                    sre_to_regexp_tree(token_repeated, max_handled_repeat=max_handled_repeat),
+                    sre_to_regexp_tree(regexp_tail))
+
         elif token_type == 'branch':
-            pass
+            union_elements = current_token[1][1]
+            return make_regexp_tree_union(union_elements, regexp_tail, max_handled_repeat=max_handled_repeat)
+
         elif token_type == 'at':
             pass
 
 
+def make_regexp_intervals_union(intervals, next, max_handled_repeat=100):
+    """
+    Given a list of sre 'in', 'range and 'literal' tokens, return a union of those as RegexpTree
+    """
+    intervals = sre_list_to_interval(intervals)
 
+    list_length = len(intervals)
+
+    if list_length == 0:
+        return None
+
+    # Will return a 'single' if we gave a single interval
+    elif list_length == 1:
+        min = intervals[0][0]
+        max = intervals[0][1]
+        return RegexpTree('single', min, max, sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat))
+
+    else:
+        fst = intervals[0]
+        return RegexpTree(
+            'union',
+            RegexpTree('single', sre_to_regexp_tree(fst, max_handled_repeat=max_handled_repeat), None),
+            make_regexp_intervals_union(intervals[1:], [], max_handled_repeat=max_handled_repeat),
+            sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
+        )
+
+
+def make_regexp_tree_union(regexp_union, next, max_handled_repeat=100):
+    """
+    Given a list of sre parsed regexp, return a union of those as a RegexpTree.
+    """
+    list_length = len(regexp_union)
+
+    if list_length == 0:
+        return None
+
+    elif list_length == 1:
+        return sre_to_regexp_tree(regexp_union[0], max_handled_repeat=max_handled_repeat)
+
+    else:
+        fst = regexp_union[0]
+        return RegexpTree(
+            'union',
+            sre_to_regexp_tree(fst, max_handled_repeat=max_handled_repeat),
+            make_regexp_tree_union(regexp_union[1:], [], max_handled_repeat=max_handled_repeat),
+            sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
+        )
 
 
 def sre_list_to_interval(regexp_list):
     """
-    Given a list of sre 'literal', sre 'in', sre 'range' or int, return a list of corresponding intervals of ascii
+    Given a list of int, sre 'literal', sre 'in' or sre 'range' return a list of corresponding intervals of ascii
     values.
+    """
+    return set_to_intervals(sre_list_to_set(regexp_list))
+
+
+def sre_list_to_set(regexp_list):
+    """
+    Given a list of int, sre 'literal', sre 'in' or sre 'range' return a set of corresponding ascii values.
     """
 
     if not isinstance(regexp_list, list):
@@ -609,21 +728,26 @@ def sre_list_to_interval(regexp_list):
 
     alphabet = set()
 
-    for regexp in regexp_list:
-        for token in regexp:
+    for token in regexp_list:
+
+        if isinstance(token, int):
+            alphabet.add(token)
+
+        else:
             type = token[0]
-            value = token[1]
 
             if type == "literal":
+                value = token[1]
                 alphabet.add(value)
 
             elif type == "in":
-                alphabet |= sre_list_to_interval([value])
+                alphabet |= sre_list_to_set(token[1])
 
             elif type == "range":
+                value = token[1]
                 alphabet |= set(range(value[0], value[1] + 1))
 
-    return set_to_intervals(alphabet)
+    return alphabet
 
 
 def format_char_to_sre(char):
