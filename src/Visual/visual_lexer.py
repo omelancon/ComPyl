@@ -1,72 +1,52 @@
 import networkx
 import matplotlib.pyplot as pyplot
-from networkx.drawing.nx_agraph import write_dot
 
 
-def plot_lexer_automata(fsa):
+def plot_nfa(nfa):
 
-    # Recover nodes
     nodes = []
-    todo_nodes = [fsa]
+    edges = []
+    todo_nodes = [nfa]
+
+    edge_labels = {}
+    node_labels = {}
+    nodes_obj_as_dict = {}
 
     while todo_nodes:
         node = todo_nodes.pop()
         nodes.append(node)
+        nodes_obj_as_dict[node.id] = node
 
-        for lookout, child in node.next_states.items():
+        node_labels[node.id] = node.id
+
+        for lookout, child in node.next_states:
+
+            edges.append((node.id, child.id))
+
+            if 0 <= lookout[0] < lookout[1] <= 256:
+                edge_labels[(node.id, child.id)] = "[%s-%s]" % (chr(lookout[0]), chr(lookout[1]))
+
+            elif -1 < lookout[0] == lookout[1]:
+                edge_labels[(node.id, child.id)] = "'%s'" % chr(lookout[1])
+
             if child in nodes or child in todo_nodes:
                 continue
             else:
                 todo_nodes.append(child)
 
-    # Recover edges
-    edges = []
-
-    for node in nodes:
-        for key, child in node.next_states.items():
-            edges.append((id(node), id(child)))
-
     graph = networkx.DiGraph()
-    graph.add_nodes_from([id(node) for node in nodes])
+    graph.add_nodes_from([node.id for node in nodes])
     graph.add_edges_from(edges)
 
-    relabel = {}
-    unique_id = 0
-    for node in nodes:
-        str_unique_id = str(unique_id)
-
-        if node.current_state == None:
-            label = "START"
-        elif node.current_state == -1:
-            label = "EMPTY"
-        else:
-            label = "'" + chr(node.current_state) + "'"
-
-        if label != "START":
-            label = "N" + str_unique_id + ": " + label
-
-            if node.terminal_token:
-                if isinstance(node.terminal_token, str):
-                    label += "\n" + node.terminal_token
-                elif hasattr(node.terminal_token, '__call__'):
-                    label += "\nfn: " + node.terminal_token.__name__
-                else:
-                    label += "\n" + "IGNORED"
-
-        relabel[id(node)] = label
-
-        unique_id += 1
-
-    graph = networkx.relabel_nodes(graph, relabel)
-
-    # Change color of nodes with self loops so they are visible with Networkx
     # TODO: Update the drawing to used Graphviz and have actual self loops
-    loops = graph.nodes_with_selfloops()
-    colors = {node: 'r' if node in loops else 'b' for node in graph.nodes()}
+    #loops = graph.nodes_with_selfloops()
+
+    colors = {node: 'r' if nodes_obj_as_dict[node].terminal_token else 'b' for node in graph.nodes()}
 
     color_map = [colors.get(node) for node in graph.nodes()]
 
-    networkx.draw(graph, pos=hierarchy_pos(graph, "START"), with_labels=True, node_color=color_map)
+    networkx.draw(graph, pos=hierarchy_pos(graph, 0), with_labels=True, node_color=color_map)
+    networkx.draw_networkx_edge_labels(graph, hierarchy_pos(graph, 0), edge_labels=edge_labels)
     pyplot.savefig("visual_lexer.png")
 
 

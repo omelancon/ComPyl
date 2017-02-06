@@ -169,7 +169,7 @@ class FiniteAutomata():
 
 
 class LexerNFA(FiniteAutomata):
-    def add_rule(self, regexp, token):
+    def add_rule(self, regexp):
         """
         Add the given rule to the NFA.
         See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
@@ -187,11 +187,11 @@ class LexerNFA(FiniteAutomata):
                 max_ascii = regexp.max_ascii
 
                 next = first.add_transition_range(min_ascii, max_ascii)
-                last = next.add_rule(regexp.next, token)
+                _, last = next.add_rule(regexp.next)
 
             elif regexp.type == 'union':
-                fst_branch = first.add_rule(regexp.fst, token)
-                snd_branch = first.add_rule(regexp.snd, token)
+                fst_branch = first.add_rule(regexp.fst)
+                snd_branch = first.add_rule(regexp.snd)
 
                 last = fst_branch[1].add_empty_transition()
                 snd_branch[1].add_empty_transition_to_state(last)
@@ -199,32 +199,36 @@ class LexerNFA(FiniteAutomata):
             elif regexp.type == 'kleene':
                 # The regexp A* leads to the following NFA
                 #
-                # s0 ---> s1 -A-> s2 ---> s3 (ACCEPT)
-                # ^        ^------|       |
-                # |-----------------------|
+                # self ---> first ---> s1 -A-> s2 ---> s3 (ACCEPT)
+                #             |          ^------|       ^
+                #             |-------------------------|
                 #
                 # See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
 
-                s0, s2 = first.add_rule(regexp.pattern, token)
+                s1, s2 = first.add_rule(regexp.pattern)
                 s3 = s2.add_empty_transition()
                 # There should be a unique empty transition at this point
-                s1 = s0.get_transition_for_empty_string()[0]
 
                 s2.add_empty_transition_to_state(s1)
-                s3.add_empty_transition_to_state(s0)
+                first.add_empty_transition_to_state(s3)
 
                 last = s3
 
-        else:
-            self.set_terminal_token(token)
-            first = last = self
+                _, last = last.add_rule(regexp.next)
 
-        return first, last
+            return first, last
+
+        else:
+            return self, self
+
+
 
     def build(self, rules):
         for rule, token in rules:
-            formated_rule = None
-            self.add_rule(rule, token)
+            formated_rule = format_regexp(rule)
+            _, terminal_node = self.add_rule(formated_rule)
+            terminal_node.set_terminal_token(token)
+
 
 
 class LexerDFA(FiniteAutomata):
@@ -371,7 +375,7 @@ class LexerDFA(FiniteAutomata):
 
                 while count <= min_repeat:
 
-                    lookout_nodes = {lookout : automata_class(lookout) for lookout in formated_lookouts}
+                    lookout_nodes = {lookout: automata_class(lookout) for lookout in formated_lookouts}
 
                     for node in node_layer:
 
@@ -388,7 +392,7 @@ class LexerDFA(FiniteAutomata):
                 # Generate the remaining chain (depth n to m) and remember them as they will be returned as terminal
                 while count <= max_repeat:
 
-                    lookout_nodes = {lookout : automata_class(lookout) for lookout in formated_lookouts}
+                    lookout_nodes = {lookout: automata_class(lookout) for lookout in formated_lookouts}
 
                     for node in node_layer:
 
@@ -420,7 +424,7 @@ class LexerDFA(FiniteAutomata):
 
                 while count <= max_repeat:
 
-                    lookout_nodes = {lookout : automata_class(lookout) for lookout in formated_lookouts}
+                    lookout_nodes = {lookout: automata_class(lookout) for lookout in formated_lookouts}
 
                     for node in node_layer:
 
@@ -537,6 +541,11 @@ def set_to_intervals(ascii_set):
 # ========================================================
 
 class RegexpTree():
+    """
+    A tree structure of a regexp.
+    Reduce a regexp to basic regexp tokens, that is characters, unions (or) and kleene operator (*)
+    Characters are treated in intervals.
+    """
 
     def __init__(self, node_type, *values):
 
@@ -553,12 +562,38 @@ class RegexpTree():
 
         elif node_type == "union":
             self.fst = values[0]
-            self.snd = values [1]
+            self.snd = values[1]
             self.next = values[2]
 
         elif node_type == 'kleene':
             self.pattern = values[0]
             self.next = values[1]
+
+    def __str__(self):
+        return "<RegexpTree '%s'>" % self.type
+
+    def print_regexp(self):
+        """
+        Return the corresponding regexp as string
+        """
+        if self.type == 'single':
+            if self.min_ascii == self.max_ascii:
+                exp = chr(self.min_ascii)
+            else:
+                exp = "[%s-%s]" % (chr(self.min_ascii), chr(self.max_ascii))
+
+        elif self.type == 'union':
+            if self.fst is None:
+                exp = "(%s)?" % self.snd.print_regexp()
+            elif self.snd is None:
+                exp = "(%s)?" % self.fst.print_regexp()
+            else:
+                exp = "(%s)|(%s)" % (self.fst.print_regexp(), self.snd.print_regexp())
+
+        elif self.type == 'kleene':
+            exp = "(%s)*" % self.pattern.print_regexp()
+
+        return exp if self.next is None else (exp + self.next.print_regexp())
 
 
 def format_regexp(regexp):
@@ -571,7 +606,7 @@ def format_regexp(regexp):
     return sre_to_regexp_tree(parsed_regexp.data)
 
 
-def sre_to_regexp_tree(sre_regexp, max_handled_repeat = 100):
+def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
     """
     Take a regexp as sre_parse tokens list and return the equivalent RegexpTree.
     """
@@ -626,17 +661,19 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat = 100):
             max = current_token[1][1]
 
             if min > 0:
-                extension = min * token_repeated + [('max_repeat', (0, max, token_repeated))] + regexp_tail
+                new_max = max - min if max <= max_handled_repeat else max
+                extension = min * token_repeated + [('max_repeat', (0, new_max, token_repeated))] + regexp_tail
                 return sre_to_regexp_tree(
-                        extension,
-                        max_handled_repeat=max_handled_repeat
-                    )
+                    extension,
+                    max_handled_repeat=max_handled_repeat
+                )
             elif 1 <= max <= max_handled_repeat:
                 branch_token = ('branch',
                                 (None,
-                                 [('max_repeat', (0, max - 1))],
-                                 [token_repeated, ('max_repeat', (0, max - 1))
-                                  ])
+                                 ([('max_repeat', (0, max - 1, token_repeated))],
+                                  token_repeated + [('max_repeat', (0, max - 1, token_repeated))
+                                                    ])
+                                 )
                                 )
                 return sre_to_regexp_tree(
                     [branch_token] + regexp_tail,
@@ -644,7 +681,7 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat = 100):
                 )
 
             elif max == 0:
-                return None
+                return sre_to_regexp_tree(regexp_tail, max_handled_repeat=max_handled_repeat)
 
             # Case where min = 0, max = inf, i.e. a Kleene operator
             else:
@@ -655,17 +692,28 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat = 100):
 
         elif token_type == 'branch':
             union_elements = current_token[1][1]
-            return make_regexp_tree_union(union_elements, regexp_tail, max_handled_repeat=max_handled_repeat)
+            return make_regexp_sre_union(union_elements, regexp_tail, max_handled_repeat=max_handled_repeat)
+
+        elif token_type == 'subpattern':
+
+            if isinstance(current_token[1][1], sre_parse.SubPattern):
+                sub_regexp = current_token[1][1].data
+            else:
+                sub_regexp = current_token[1][1]
+
+            subpattern = sre_to_regexp_tree(sub_regexp + regexp_tail)
+            return subpattern
 
         elif token_type == 'at':
             pass
 
 
-def make_regexp_intervals_union(intervals, next, max_handled_repeat=100):
+def make_regexp_intervals_union(intervals, next, max_handled_repeat=100, already_in_intervals=False):
     """
     Given a list of sre 'in', 'range and 'literal' tokens, return a union of those as RegexpTree
     """
-    intervals = sre_list_to_interval(intervals)
+    if not already_in_intervals:
+        intervals = sre_list_to_interval(intervals)
 
     list_length = len(intervals)
 
@@ -682,13 +730,14 @@ def make_regexp_intervals_union(intervals, next, max_handled_repeat=100):
         fst = intervals[0]
         return RegexpTree(
             'union',
-            RegexpTree('single', sre_to_regexp_tree(fst, max_handled_repeat=max_handled_repeat), None),
-            make_regexp_intervals_union(intervals[1:], [], max_handled_repeat=max_handled_repeat),
+            RegexpTree('single', fst[0], fst[1], None),
+            make_regexp_intervals_union(intervals[1:], [], max_handled_repeat=max_handled_repeat,
+                                        already_in_intervals=True),
             sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
         )
 
 
-def make_regexp_tree_union(regexp_union, next, max_handled_repeat=100):
+def make_regexp_sre_union(regexp_union, next, max_handled_repeat=100):
     """
     Given a list of sre parsed regexp, return a union of those as a RegexpTree.
     """
@@ -698,16 +747,20 @@ def make_regexp_tree_union(regexp_union, next, max_handled_repeat=100):
         return None
 
     elif list_length == 1:
-        return sre_to_regexp_tree(regexp_union[0], max_handled_repeat=max_handled_repeat)
+        regexp_tree = sre_to_regexp_tree(regexp_union[0], max_handled_repeat=max_handled_repeat)
+        return regexp_tree
 
     else:
-        fst = regexp_union[0]
-        return RegexpTree(
-            'union',
-            sre_to_regexp_tree(fst, max_handled_repeat=max_handled_repeat),
-            make_regexp_tree_union(regexp_union[1:], [], max_handled_repeat=max_handled_repeat),
-            sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
-        )
+        fst_exp = regexp_union[0]
+        fst_branch = sre_to_regexp_tree(fst_exp, max_handled_repeat=max_handled_repeat)
+        snd_branch = make_regexp_sre_union(regexp_union[1:], [], max_handled_repeat=max_handled_repeat)
+        next_branch = sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
+
+        # It happens that both branches were empty expressions, we then collapse the tree
+        if fst_branch is None and snd_branch is None:
+            return next_branch
+        else:
+            return RegexpTree('union', fst_branch, snd_branch, next_branch)
 
 
 def sre_list_to_interval(regexp_list):
@@ -720,7 +773,7 @@ def sre_list_to_interval(regexp_list):
 
 def sre_list_to_set(regexp_list):
     """
-    Given a list of int, sre 'literal', sre 'in' or sre 'range' return a set of corresponding ascii values.
+    Given a list of int, (min, max), sre 'literal', sre 'in' or sre 'range' return a set of corresponding ascii values.
     """
 
     if not isinstance(regexp_list, list):
@@ -732,6 +785,9 @@ def sre_list_to_set(regexp_list):
 
         if isinstance(token, int):
             alphabet.add(token)
+
+        elif isinstance(token[0], int) and isinstance(token[1], int):
+            alphabet.add(set(range(token[0], token[1] + 1)))
 
         else:
             type = token[0]
@@ -811,11 +867,11 @@ def get_formated_lookouts(lookouts):
     # sre formats
     elif isinstance(lookouts, tuple):
 
-            if lookouts[0] == 'literal':
-                formated_lookouts = [lookouts[1]]
+        if lookouts[0] == 'literal':
+            formated_lookouts = [lookouts[1]]
 
-            elif lookouts[0] == 'in':
-                formated_lookouts = get_ascii_list_from_rse_in(lookouts)
+        elif lookouts[0] == 'in':
+            formated_lookouts = get_ascii_list_from_rse_in(lookouts)
 
     else:
         raise UnrecognizedLookoutFormat

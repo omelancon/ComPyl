@@ -7,10 +7,13 @@ def B(t, value):
     return "B_token"
 
 rules = [
-    ("[1-9]+bcd", "Accept"),
-    ("[a-z]bc", "Good")
+    ("for", "F"),
+    ("while", "W"),
+    ('[a-zA-Z]+', "ID")
 ]
 
-tree = FiniteAutomata.format_regexp('[1-9]+bcd|j')
+nfa = FiniteAutomata.LexerNFA()
 
-print tree
+nfa.build(rules)
+
+visual_lexer.plot_nfa(nfa)
