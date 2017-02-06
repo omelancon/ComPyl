@@ -7,15 +7,15 @@ def B(t, value):
     return "B_token"
 
 rules = [
-    ("A|(B{1,3})", "Accept")
+    ("A|C", "Accept")
 ]
 
-nfa = FiniteAutomata.LexerNFA()
+# nfa = FiniteAutomata.LexerNFA()
 
-r = FiniteAutomata.format_regexp(rules[0][0])
+# nfa.build(rules)
 
-print r.print_regexp()
+# visual_lexer.plot_nfa(nfa)
 
-nfa.build(rules)
+dfa = FiniteAutomata.LexerDFA.build(rules)
 
-visual_lexer.plot_nfa(nfa)
+print dfa
