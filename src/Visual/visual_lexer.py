@@ -24,10 +24,25 @@ def plot_nfa(nfa):
             edges.append((node.id, child.id))
 
             if 0 <= lookout[0] < lookout[1] <= 256:
-                edge_labels[(node.id, child.id)] = "[%s-%s]" % (chr(lookout[0]), chr(lookout[1]))
+                if 32 < lookout[0] < 128:
+                    fst = chr(lookout[0])
+                else:
+                    fst = '???'
+
+                if 32 < lookout[1] < 128:
+                    snd = chr(lookout[1])
+                else:
+                    snd = '???'
+
+                edge_labels[(node.id, child.id)] = "[%s-%s]" % (fst, snd)
 
             elif -1 < lookout[0] == lookout[1]:
-                edge_labels[(node.id, child.id)] = "'%s'" % chr(lookout[1])
+                if 32 < lookout[1] < 128:
+                    char = chr(lookout[1])
+                else:
+                    char = '???'
+
+                edge_labels[(node.id, child.id)] = "'%s'" % char
 
             if child in nodes or child in todo_nodes:
                 continue

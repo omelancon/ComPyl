@@ -7,12 +7,14 @@ def B(t, value):
     return "B_token"
 
 rules = [
-    ("for", "F"),
-    ("while", "W"),
-    ('[a-zA-Z]+', "ID")
+    ("A|(B{1,3})", "Accept")
 ]
 
 nfa = FiniteAutomata.LexerNFA()
+
+r = FiniteAutomata.format_regexp(rules[0][0])
+
+print r.print_regexp()
 
 nfa.build(rules)
 
