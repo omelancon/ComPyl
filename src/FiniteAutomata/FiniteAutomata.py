@@ -302,6 +302,7 @@ class LexerDFA(FiniteAutomata):
         # A good example of what this algorithm is doing can be watched here:
         # https://www.youtube.com/watch?v=taClnxU-nao
         alphabet = get_minimal_covering_intervals(edges_lookouts)
+        alphabet.remove(LexerDFA.EMPTY)
 
         epsilon_star_groups = {}
         for node_id, node in nodes_as_dict.items():
@@ -309,7 +310,8 @@ class LexerDFA(FiniteAutomata):
 
         dfa_nodes_table = {}
 
-        dfa_nodes_queue = [tuple([nfa.id])]
+        initial_epsilon_group = tuple(epsilon_star_groups[nfa.id])
+        dfa_nodes_queue = [initial_epsilon_group]
 
         while dfa_nodes_queue:
             dfa_node = dfa_nodes_queue.pop()
@@ -350,9 +352,10 @@ class LexerDFA(FiniteAutomata):
 
             # Set the transition states
             for lookout, target in dfa_nodes_table[sub_id].items():
-                node.add_transition_to_state(lookout[0], lookout[1], target)
+                if target:
+                    node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
 
-        return dfa_nodes_as_dict[tuple([nfa.id])]
+        return dfa_nodes_as_dict[initial_epsilon_group]
 
 
     @staticmethod
