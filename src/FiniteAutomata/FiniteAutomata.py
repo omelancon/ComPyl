@@ -14,8 +14,6 @@ class FiniteAutomata(object):
     """
     Basic skeleton for Deterministic and Non-deterministic Finite Automata.
     A FiniteAutomata object is a node of the graph representation of the automata.
-
-
     """
     # Counter for state id
     _ids = count(0)
@@ -138,6 +136,7 @@ class LexerNFA(FiniteAutomata):
     def __init__(self, *args, **kwargs):
         super(LexerNFA, self).__init__(*args, **kwargs)
         self.terminal_priority = kwargs['terminal_priority'] if 'terminal_priority' in kwargs else None
+        self.epsilon_star_group = None
 
     def set_terminal_token(self, terminal_token, priority=None):
         """
@@ -254,20 +253,40 @@ class LexerNFA(FiniteAutomata):
 
         return states
 
-    def get_epsilon_star_group(self, group=None):
+    def get_epsilon_star_group(self, force_recalculate=False):
         """
-        Add all nodes linked by 0 or more epsilon (empty) transition from self, including self, to group, and return it.
+        Return the epsilon* group of the state, calculate it if not done yet
         """
-        if group is None:
-            group = []
+        if self.epsilon_star_group is None or force_recalculate:
+            self._calculate_epsilon_star_group(force_recalculate=force_recalculate)
 
-        for node in [self] + (self.get_transition_for_empty_string()):
-            if node not in group:
-                group.append(node)
+        return self.epsilon_star_group
 
-                node.get_epsilon_star_group(group=group)
+    def _calculate_epsilon_star_group(self, _group=None, force_recalculate=False):
+        """
+        Add all nodes linked by 0 or more epsilon (empty) transition from self, including self, to _group.
+        Store the new _group is self.epsilon_star_group if we are at top level (_group is None)
+        Then return the _group as set
+        """
+        # We will write the group to self only if save is True, that is for the node that called the initial calculation
+        save = False
 
-        return group
+        if _group is None:
+            _group = set()
+            save = True
+
+        for node in self.get_transition_for_empty_string():
+            if force_recalculate or node.get_epsilon_star_group is None:
+                node_group = node._calculate_epsilon_star_group(_group=_group, force_recalculate=force_recalculate)
+            else:
+                node_group = node.epsilon_star_group
+
+            _group |= node_group
+
+        _group.add(self)
+        self.epsilon_star_group = list(_group)
+
+        return _group
 
 
 class LexerDFA(FiniteAutomata):
