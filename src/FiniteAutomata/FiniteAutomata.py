@@ -129,7 +129,6 @@ class FiniteAutomata(object):
 
 
 class LexerNFA(FiniteAutomata):
-
     # Counter for state id
     _ids = count(0)
 
@@ -255,7 +254,7 @@ class LexerNFA(FiniteAutomata):
 
     def get_epsilon_star_group(self, force_recalculate=False):
         """
-        Return the epsilon* group of the state, calculate it if not done yet
+        Return the epsilon* group of the state, calculate it if not done yet or if force_recalculate is True
         """
         if self.epsilon_star_group is None or force_recalculate:
             self._calculate_epsilon_star_group(force_recalculate=force_recalculate)
@@ -276,7 +275,7 @@ class LexerNFA(FiniteAutomata):
             save = True
 
         for node in self.get_transition_for_empty_string():
-            if force_recalculate or node.get_epsilon_star_group is None:
+            if force_recalculate or node.epsilon_star_group is None:
                 node_group = node._calculate_epsilon_star_group(_group=_group, force_recalculate=force_recalculate)
             else:
                 node_group = node.epsilon_star_group
@@ -284,13 +283,13 @@ class LexerNFA(FiniteAutomata):
             _group |= node_group
 
         _group.add(self)
-        self.epsilon_star_group = list(_group)
+        if save:
+            self.epsilon_star_group = list(_group)
 
         return _group
 
 
 class LexerDFA(FiniteAutomata):
-
     # Counter for state id
     _ids = count(0)
 
@@ -299,44 +298,43 @@ class LexerDFA(FiniteAutomata):
         """
         Generate the Deterministic Finite Automata corresponding to the given NFA
         """
-        nodes_queue = [nfa]
-        edges_lookouts = []
-        nodes_as_dict = {}
+        # ========================================================
+        # Recover all nodes and possible lookouts found in the NFA
+        # ========================================================
+        # This step is required to recover the lookouts which will allow to determine the alphabet of the language
+        # The construction of an id -> node dictionary is not absolutely necessary, but we build it as a helper while
+        # we are at it.
+        nodes_as_dict, edges_lookouts = recover_nodes_and_lookouts_from_nfa(nfa)
 
-        # Recover all nodes and edges from the NFA
-        while nodes_queue:
-            node = nodes_queue.pop()
+        # ========================================================
+        # Recover the alphabet of the language
+        # ========================================================
+        # Since our edges are intervals, we use a Minimal Covering Set of Intervals as our alphabet, see the doc string
+        # of function get_minimal_covering_intervals for definition of a MCSI
+        # EMPTY is not in the alphabet (epsilon is an element of A*, not in A, where A is the alphabet), so we remove it
+        alphabet = get_minimal_covering_intervals(edges_lookouts)
+        alphabet.remove(LexerNFA.EMPTY)
 
-            if node.id not in nodes_as_dict:
-                nodes_as_dict[node.id] = node
-
-                for lookout, child in node.next_states:
-
-                    if lookout not in edges_lookouts:
-                        edges_lookouts.append(lookout)
-
-                    nodes_queue.append(child)
-
+        # ========================================================
         # Build the DFA table
+        # ========================================================
         # A good example of what this algorithm is doing can be watched here:
         # https://www.youtube.com/watch?v=taClnxU-nao
-        alphabet = get_minimal_covering_intervals(edges_lookouts)
-        alphabet.remove(LexerDFA.EMPTY)
-
-        epsilon_star_groups = {}
-        for node_id, node in nodes_as_dict.items():
-            epsilon_star_groups[node_id] = [child.id for child in node.get_epsilon_star_group()]
-
+        # We also store the parents from a given lookout for each node, this will be used in the minimisation step
         dfa_nodes_table = {}
 
-        initial_epsilon_group = tuple(epsilon_star_groups[nfa.id])
+        initial_epsilon_group = node_list_to_sorted_tuple_of_id(nfa.get_epsilon_star_group())
         dfa_nodes_queue = [initial_epsilon_group]
+        seen_nodes = set()
 
         while dfa_nodes_queue:
             dfa_node = dfa_nodes_queue.pop()
 
-            if dfa_node not in dfa_nodes_table:
-                dfa_nodes_table[dfa_node] = {}
+            if dfa_node not in seen_nodes:
+
+                if dfa_node not in dfa_nodes_table:
+                    dfa_nodes_table[dfa_node] = {'is_terminal': False, 'terminal': None, 'transitions': {},
+                                                 'parents': {lookout: set() for lookout in alphabet}}
 
                 for lookout in alphabet:
 
@@ -345,37 +343,70 @@ class LexerDFA(FiniteAutomata):
                     for nfa_node_id in dfa_node:
 
                         nfa_node = nodes_as_dict[nfa_node_id]
-                        lookout_states = [child.id for child in nfa_node.get_transition_states_for_interval(lookout)]
-                        for state in lookout_states:
-                            epsilon_star_states |= set(epsilon_star_groups[state])
+
+                        for state in nfa_node.get_transition_states_for_interval(lookout):
+                            epsilon_star_group = state.get_epsilon_star_group()
+                            epsilon_star_states |= node_list_to_set_of_id(epsilon_star_group)
 
                     new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else None
-                    dfa_nodes_table[dfa_node][lookout] = new_dfa_node
+                    dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
+
+                    if new_dfa_node not in dfa_nodes_table:
+                        dfa_nodes_table[new_dfa_node] = {'is_terminal': False, 'terminal': None, 'transitions': {},
+                                                         'parents': {lookout: set() for lookout in alphabet}}
+
+                    dfa_nodes_table[new_dfa_node]['parents'][lookout].add(dfa_node)
 
                     if new_dfa_node:
                         dfa_nodes_queue.append(new_dfa_node)
 
-        # dfa_nodes_table now contains all the information required to build the DFA as a LexerDFA object
-        # We first create the LexerDFA nodes to link later
+                seen_nodes.add(dfa_node)
+
+        # ========================================================
+        # Mark the terminal nodes
+        # ========================================================
+        # A NFA can reach multiple terminal states at once, in the case of a DFA we recover all those terminal
+        # states and take the one with the highest priority, that is the one which rule was given first when
+        # building the NFA
+        for sub_id in dfa_nodes_table:
+            possible_terminals = [nodes_as_dict[id] for id in sub_id]
+            terminal_node = get_max_priority_terminal(possible_terminals)
+
+            # Store the terminal
+            # The use of the boolean is because None means the state is terminal but ignored, we cannot simply use
+            # 'terminal' entry to be None to indicate that the node is not a final state
+            if terminal_node:
+                dfa_nodes_table[sub_id]['is_terminal'] = True
+                dfa_nodes_table[sub_id]['terminal'] = terminal_node.get_terminal_token()
+
+        # ========================================================
+        # Minimize the DFA
+        # ========================================================
+        # dfa_node_table represents a DFA, but might not be minimal
+        # We get the minimal DFA using Hopcroft's algorithm
+
+        # ========================================================
+        # Build the final data structure of the DFA
+        # ========================================================
+        # dfa_nodes_table now contains all the information required to build the minimal DFA as a LexerDFA object
+        # We first create the LexerDFA nodes to link afterward
 
         dfa_nodes_as_dict = {sub_id: LexerDFA() for sub_id in dfa_nodes_table}
 
         for sub_id, node in dfa_nodes_as_dict.items():
 
             # Set the terminal token
-            possible_terminals = [nodes_as_dict[id] for id in sub_id]
-            terminal_node = get_max_priority_terminal(possible_terminals)
-
-            if terminal_node:
-                node.set_terminal_token(terminal_node.get_terminal_token())
+            is_terminal = dfa_nodes_table[sub_id]['is_terminal']
+            if is_terminal:
+                token = dfa_nodes_table[sub_id]['terminal']
+                node.set_terminal_token(token)
 
             # Set the transition states
-            for lookout, target in dfa_nodes_table[sub_id].items():
+            for lookout, target in dfa_nodes_table[sub_id]['transitions'].items():
                 if target:
                     node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
 
         return dfa_nodes_as_dict[initial_epsilon_group]
-
 
     @staticmethod
     def build(rules):
@@ -383,6 +414,50 @@ class LexerDFA(FiniteAutomata):
         nfa.build(rules)
 
         return LexerDFA.build_from_nfa(nfa)
+
+
+def hopcrofts_algorithm(dfa_nodes_table):
+    """
+    Hopcroft's algorithm for minimalisation of a DFA
+    :param dfa_nodes_table: A dictionary id -> node, each node is itself a dictionary with the keys 'is_terminal',
+    'terminal', 'transitions', 'parents'. 'is_terminal' is a boolean stating if the state is an accepting state,
+    'terminal' stores the token returned by the accepting state, 'transitions' is a dict lookout -> node_id, 'parents'
+    is similar to lookout, entries point to sets of nodes id from which the current node is attainable given a certain
+    lookout.
+    :return: A dict of similar structure as the input, but representing the minimal DFA
+    """
+    terminal_states = set([id for id in dfa_nodes_table if dfa_nodes_table[id]['is_terminal']])
+    non_terminal_states = set([id for id in dfa_nodes_table if not dfa_nodes_table[id]['is_terminal']])
+
+    sets_to_refine = [terminal_states]
+
+    while sets_to_refine:
+        pass
+
+
+def recover_nodes_and_lookouts_from_nfa(nfa):
+    """
+    Given a Non-Deterministic Finite Automata, return a dict of all nodes keyed by id and a list of all lookouts value
+     found in the NFA.
+    """
+    edges_lookouts = []
+    nodes_as_dict = {}
+    nodes_queue = [nfa]
+
+    while nodes_queue:
+        node = nodes_queue.pop()
+
+        if node.id not in nodes_as_dict:
+            nodes_as_dict[node.id] = node
+
+            for lookout, child in node.next_states:
+
+                if lookout not in edges_lookouts:
+                    edges_lookouts.append(lookout)
+
+                nodes_queue.append(child)
+
+    return nodes_as_dict, edges_lookouts
 
 
 def get_max_priority_terminal(nfa_nodes_list):
@@ -398,6 +473,14 @@ def get_max_priority_terminal(nfa_nodes_list):
             highest_node = node
 
     return highest_node
+
+
+def node_list_to_sorted_tuple_of_id(node_list):
+    return tuple(sorted([node.id for node in node_list]))
+
+
+def node_list_to_set_of_id(node_list):
+    return set([node.id for node in node_list])
 
 
 # ======================================================================================================================
