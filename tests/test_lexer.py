@@ -8,7 +8,8 @@ def B(t, value):
     return "B_token"
 
 rules = [
-    ("[ac]+", "Accept")
+    ("a+", "Accept"),
+    ("b+", "Good")
 ]
 
 dfa = FiniteAutomata.LexerDFA.build(rules)

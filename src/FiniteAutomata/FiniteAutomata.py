@@ -10,6 +10,10 @@ class NodeAlreadyHasTerminalToken(Exception):
     pass
 
 
+class LostInitialState(Exception):
+    pass
+
+
 class FiniteAutomata(object):
     """
     Basic skeleton for Deterministic and Non-deterministic Finite Automata.
@@ -327,6 +331,12 @@ class LexerDFA(FiniteAutomata):
         dfa_nodes_queue = [initial_epsilon_group]
         seen_nodes = set()
 
+        # We have to add the error node because Hopcroft algorithm that will later be used to minimize the DFA
+        # requires a complete DFA. We first add the error node in the table
+        error_node_id = tuple()
+        dfa_nodes_table[error_node_id] = {'is_terminal': False, 'terminal': None, 'transitions': {},
+                                          'parents': {lookout: {error_node_id} for lookout in alphabet}}
+
         while dfa_nodes_queue:
             dfa_node = dfa_nodes_queue.pop()
 
@@ -348,7 +358,7 @@ class LexerDFA(FiniteAutomata):
                             epsilon_star_group = state.get_epsilon_star_group()
                             epsilon_star_states |= node_list_to_set_of_id(epsilon_star_group)
 
-                    new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else None
+                    new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else error_node_id
                     dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
 
                     if new_dfa_node not in dfa_nodes_table:
@@ -385,28 +395,39 @@ class LexerDFA(FiniteAutomata):
         # dfa_node_table represents a DFA, but might not be minimal
         # We get the minimal DFA using Hopcroft's algorithm
 
+        minimum_dfa = hopcrofts_algorithm(dfa_nodes_table, alphabet)
+
         # ========================================================
         # Build the final data structure of the DFA
         # ========================================================
         # dfa_nodes_table now contains all the information required to build the minimal DFA as a LexerDFA object
         # We first create the LexerDFA nodes to link afterward
 
-        dfa_nodes_as_dict = {sub_id: LexerDFA() for sub_id in dfa_nodes_table}
+        dfa_nodes_as_dict = {sub_id: LexerDFA() for sub_id in minimum_dfa}
 
         for sub_id, node in dfa_nodes_as_dict.items():
 
             # Set the terminal token
-            is_terminal = dfa_nodes_table[sub_id]['is_terminal']
+            is_terminal = minimum_dfa[sub_id]['is_terminal']
             if is_terminal:
-                token = dfa_nodes_table[sub_id]['terminal']
+                token = minimum_dfa[sub_id]['terminal']
                 node.set_terminal_token(token)
 
             # Set the transition states
-            for lookout, target in dfa_nodes_table[sub_id]['transitions'].items():
+            for lookout, target in minimum_dfa[sub_id]['transitions'].items():
                 if target:
                     node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
 
-        return dfa_nodes_as_dict[initial_epsilon_group]
+        # Finally we recover the starting node to return it
+        initial_node_id = None
+        for fset in dfa_nodes_as_dict:
+            if initial_epsilon_group in fset:
+                initial_node_id = fset
+                break
+        else:
+            raise LostInitialState("For unknown reason, the build algorithm lost its own initial state. Puzzling.")
+
+        return dfa_nodes_as_dict[initial_node_id]
 
     @staticmethod
     def build(rules):
@@ -416,23 +437,96 @@ class LexerDFA(FiniteAutomata):
         return LexerDFA.build_from_nfa(nfa)
 
 
-def hopcrofts_algorithm(dfa_nodes_table):
+def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
     """
     Hopcroft's algorithm for minimalisation of a DFA
     :param dfa_nodes_table: A dictionary id -> node, each node is itself a dictionary with the keys 'is_terminal',
     'terminal', 'transitions', 'parents'. 'is_terminal' is a boolean stating if the state is an accepting state,
     'terminal' stores the token returned by the accepting state, 'transitions' is a dict lookout -> node_id, 'parents'
     is similar to lookout, entries point to sets of nodes id from which the current node is attainable given a certain
-    lookout.
-    :return: A dict of similar structure as the input, but representing the minimal DFA
+    lookout. Hopcroft's algorithm requires that the given DFA is complete, that is a state always leads to another state
+    given a lookout, but this might be the error state.
+    :param alphabet: The alphabet of the language of the DFA as a list of all possible lookouts
+    :return: A dict of similar structure as the input, but representing the minimal DFA. Although the minimal DFA
+    returned is not complete, the error state is not present, but implied by the absence of transition.
+    WARNING: The process of reindexing the nodes leads them to have frozen sets of tuples as index (keys in the returned
+    dict), this might change in the future, but is perfectly fine for now since these are hashable and meaningful.
     """
-    terminal_states = set([id for id in dfa_nodes_table if dfa_nodes_table[id]['is_terminal']])
-    non_terminal_states = set([id for id in dfa_nodes_table if not dfa_nodes_table[id]['is_terminal']])
+    terminal_states = frozenset([id for id in dfa_nodes_table if dfa_nodes_table[id]['is_terminal']])
+    non_terminal_states = frozenset([id for id in dfa_nodes_table if not dfa_nodes_table[id]['is_terminal']])
 
-    sets_to_refine = [terminal_states]
+    partition = {terminal_states, non_terminal_states}
+
+    sets_to_refine = {terminal_states}
 
     while sets_to_refine:
-        pass
+        analyzed_set = sets_to_refine.pop()
+
+        for lookout in alphabet:
+            lookout_parents = set()
+
+            for node in analyzed_set:
+                node_lookout_parents = dfa_nodes_table[node]['parents'][lookout]
+                lookout_parents |= node_lookout_parents
+
+            # Python does not allow change to a set while iterating through it, thus we have to update it afterward
+            remove_from_parition = set()
+            add_to_parition = set()
+            for element in partition:
+                intersection = element & lookout_parents
+                difference = element - lookout_parents
+
+                if intersection and difference:
+                    remove_from_parition.add(element)
+                    add_to_parition.add(intersection)
+                    add_to_parition.add(difference)
+
+                    if element in sets_to_refine:
+                        sets_to_refine.remove(element)
+                        sets_to_refine.add(intersection)
+                        sets_to_refine.add(difference)
+
+                    else:
+                        if len(intersection) <= len(difference):
+                            sets_to_refine.add(intersection)
+                        else:
+                            sets_to_refine.add(difference)
+
+            partition |= add_to_parition
+            partition -= remove_from_parition
+
+    # Every set of set in the partition can now be merged to a single state
+    # We first build a mapping (dict) from the old nodes ids to the new nodes ids
+
+    mapping = {}
+
+    for states in partition:
+        for state in states:
+            mapping[state] = states
+
+    # Remove the error node, represented by an empty tuple
+    partition.remove(frozenset([error_state_id]))
+
+    minimal_dfa = {}
+    for states in partition:
+        transitions = {}
+
+        for state in states:
+            for lookout, target in dfa_nodes_table[state]['transitions'].items():
+                if target == error_state_id or lookout in transitions:
+                    continue
+                else:
+                    transitions[lookout] = mapping[target]
+
+        # Hack to recover an item from a set
+        for any in states:
+            break
+
+        minimal_dfa[states] = {'is_terminal': dfa_nodes_table[any]['is_terminal'],
+                               'terminal': dfa_nodes_table[any]['terminal'],
+                               'transitions': transitions}
+
+    return minimal_dfa
 
 
 def recover_nodes_and_lookouts_from_nfa(nfa):
