@@ -48,6 +48,29 @@ class FiniteAutomata(object):
     def __str__(self):
         return "<State '%d'>" % (self.id)
 
+    def relabel_states(self, start=0):
+        """
+        Relabel the states' ids (self.id) from start.
+        Note that this must be called from the starting state to relabel correctly, without duplicates
+        """
+        def rec_relabel(state, relabeled=None):
+            if not relabeled:
+                relabeled = []
+
+            state.id = self._ids.next()
+
+            for _, state in state.next_states:
+                if state not in relabeled:
+                    relabeled.append(state)
+                    rec_relabel(state, relabeled=relabeled)
+
+
+
+        # Reinitialize the counter
+        self.__class__._ids = count(start)
+
+        rec_relabel(self)
+
     def add_transition_range(self, min_ascii, max_ascii, *args, **kwargs):
         """
         Add the edge corresponding to the transition when a character from min_ascii to max_ascii is seen.
@@ -398,6 +421,32 @@ class LexerDFA(FiniteAutomata):
         minimum_dfa = hopcrofts_algorithm(dfa_nodes_table, alphabet)
 
         # ========================================================
+        # Merge adjacent lookouts
+        # ========================================================
+        # The generation of the alphabet with get_minimal_covering_intervals made partitioning of some lookouts too fine
+        # we will merge such lookouts. By example if from State x, the intervals (97,98) and (99, 102) lead to State y,
+        # we merge the lookouts so that (97, 102) leads to State y.
+
+        for id, state in minimum_dfa.items():
+            inverse_map = {}
+
+            for lookout, target in state['transitions'].items():
+                if target in inverse_map:
+                    inverse_map[target].append(lookout)
+                else:
+                    inverse_map[target] = [lookout]
+
+            new_transitions = {}
+
+            for target, lookouts in inverse_map.items():
+                new_lookouts = merge_intervals(lookouts)
+
+                for lookout in new_lookouts:
+                    new_transitions[lookout] = target
+
+            state['transitions'] = new_transitions
+
+        # ========================================================
         # Build the final data structure of the DFA
         # ========================================================
         # dfa_nodes_table now contains all the information required to build the minimal DFA as a LexerDFA object
@@ -434,7 +483,12 @@ class LexerDFA(FiniteAutomata):
         nfa = LexerNFA()
         nfa.build(rules)
 
-        return LexerDFA.build_from_nfa(nfa)
+        dfa = LexerDFA.build_from_nfa(nfa)
+
+        # The building algorithm do a poor job at labelling the dfa nodes in a decent order
+        dfa.relabel_states()
+
+        return dfa
 
 
 def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
@@ -452,12 +506,30 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
     WARNING: The process of reindexing the nodes leads them to have frozen sets of tuples as index (keys in the returned
     dict), this might change in the future, but is perfectly fine for now since these are hashable and meaningful.
     """
-    terminal_states = frozenset([id for id in dfa_nodes_table if dfa_nodes_table[id]['is_terminal']])
+    # Partition the different terminal states since we know that if they have different terminal tokens, then they are
+    # distinguishable
+    terminal_states_as_dict = {}
+
+    for id in dfa_nodes_table:
+        state = dfa_nodes_table[id]
+
+        if state['is_terminal']:
+            terminal = state['terminal']
+
+            if terminal in terminal_states_as_dict:
+                terminal_states_as_dict[terminal].add(id)
+
+            else:
+                terminal_states_as_dict[terminal] = {id}
+
+    terminal_states = {frozenset(states) for _, states in terminal_states_as_dict.items()}
     non_terminal_states = frozenset([id for id in dfa_nodes_table if not dfa_nodes_table[id]['is_terminal']])
 
-    partition = {terminal_states, non_terminal_states}
+    partition = {non_terminal_states}
+    partition |= terminal_states
 
-    sets_to_refine = {terminal_states}
+    # Refine the sets
+    sets_to_refine = terminal_states
 
     while sets_to_refine:
         analyzed_set = sets_to_refine.pop()
@@ -556,17 +628,19 @@ def recover_nodes_and_lookouts_from_nfa(nfa):
 
 def get_max_priority_terminal(nfa_nodes_list):
     """
-    Given a list of nfa nodes, return the node that has the highest priority for its rule
+    Given a list of nfa nodes, return the node that has the highest priority for its rule. A node with lowest
+    terminal_priority will have priority for its rule.
     If no node is a terminal node, None is returned instead
     """
-    highest_priority = -float('inf')
-    highest_node = None
+    best_priority = float('inf')
+    best_node = None
 
     for node in nfa_nodes_list:
-        if node.terminal_exists() and node.terminal_priority > highest_priority:
-            highest_node = node
+        if node.terminal_exists() and node.terminal_priority < best_priority:
+            best_node = node
+            best_priority = best_node.terminal_priority
 
-    return highest_node
+    return best_node
 
 
 def node_list_to_sorted_tuple_of_id(node_list):
@@ -580,6 +654,22 @@ def node_list_to_set_of_id(node_list):
 # ======================================================================================================================
 # Set operations
 # ======================================================================================================================
+
+def interval_cmp(x, y):
+    """
+    Dictionary order comparator for intervals
+    """
+    if x[0] > y[0]:
+        return 1
+    elif x[0] < y[0]:
+        return -1
+    elif x[1] > y[1]:
+        return 1
+    elif x[1] < y[1]:
+        return -1
+    else:
+        return 0
+
 
 def value_is_in_range(value, range):
     """
@@ -595,6 +685,32 @@ def is_proper_subinterval(subinterval, interval):
     Return True if subinterval (x_1, x_2) is a subset of interval (y_1, y_2), else False
     """
     return value_is_in_range(subinterval[0], interval) and value_is_in_range(subinterval[1], interval)
+
+
+def merge_intervals(intervals):
+    """
+    Given a list of intervals, return a new list of intervals where the adjacent intervals are merged.
+    Ex: [(1,3), (4,6), (10,11)] would be returned as [(1, 6), (10, 11)]
+    """
+    if not intervals:
+        return []
+
+    intervals.sort(cmp=interval_cmp)
+
+    merged_intervals = []
+    min = max = intervals[0][0]
+
+    for interval in intervals:
+        if interval[0] > max + 1:
+            merged_intervals.append((min, max))
+            min = interval[0]
+
+        max = interval[1]
+
+    merged_intervals.append((min, max))
+
+    return merged_intervals
+
 
 
 def set_to_intervals(ascii_set):
@@ -655,20 +771,6 @@ def get_minimal_covering_intervals(intervals):
     This is a way here to partition the intervals of ascii values in the lookouts of an FDA to get the lookout values
     of a DFA
     """
-
-    # dictionary order comparator
-    def interval_cmp(x, y):
-        if x[0] > y[0]:
-            return 1
-        elif x[0] < y[0]:
-            return -1
-        elif x[1] > y[1]:
-            return 1
-        elif x[1] < y[1]:
-            return -1
-        else:
-            return 0
-
     def rec(intervals):
         if not intervals:
             return []

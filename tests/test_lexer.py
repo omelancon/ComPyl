@@ -3,13 +3,10 @@ from src.FiniteAutomata import FiniteAutomata
 from src.Visual import visual_lexer
 import sre_parse
 
-
-def B(t, value):
-    return "B_token"
-
 rules = [
-    ("a+", "Accept"),
-    ("b+", "Good")
+    ("for", "FOR"),
+    ("if", "IF"),
+    (" ", None)
 ]
 
 dfa = FiniteAutomata.LexerDFA.build(rules)
