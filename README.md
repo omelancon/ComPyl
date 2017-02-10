@@ -1,6 +1,6 @@
 # Lexer
 
-A dynamic lexer in Python which rules can be easily updated during traversal.
+A lexer in Python.
 
 # Parser
 
