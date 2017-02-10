@@ -54,6 +54,10 @@ class Lexer:
 
     Lexer.lex reads the Lexer.buffer and returns a Token or None if it reached the end of the buffer
     """
+
+    class LexerController:
+        pass
+
     def __init__(self, buffer=None, rules=None, line_rule=None):
 
         self.lineno = 1
@@ -61,7 +65,7 @@ class Lexer:
         self.buffer = ""
         self.rules = []
         self.line_rule = None
-        self.fsa = LexerDFA()
+        self.dfa = None
         self.current_state = None
 
         if buffer:
@@ -111,7 +115,7 @@ class Lexer:
             self.rules.append((regex, rule))
 
     def build(self):
-        self.fsa.build(self.rules)
+        self.dfa = LexerDFA.build(self.rules)
 
     def save(self, filename="lexer.p"):
         file = open(filename, "wb")
@@ -136,8 +140,8 @@ class Lexer:
         except IndexError:
             return None
 
-        # Start at empty state of FSA
-        self.current_state = self.fsa
+        # Start at empty state of DFA
+        self.current_state = self.dfa
 
         init_pos = self.pos
         terminal_token = None
@@ -146,7 +150,7 @@ class Lexer:
         while True:
             try:
                 lookout = self.buffer[self.pos]
-                lookout_state = self.current_state.recover_lookout(lookout)
+                lookout_state = self.current_state.transition(lookout)
             except IndexError:
                 # End of buffer
                 lookout_state = None
@@ -168,7 +172,7 @@ class Lexer:
         value = self.buffer[init_pos:self.pos]
         ignore = False
 
-        # A None terminal token represents an ignored state
+        # A None terminal token represents an ignored state (usually spaces and linebreaks)
         if terminal_token is None:
             ignore = True
 
@@ -185,7 +189,7 @@ class Lexer:
             try:
                 token_type = terminal_token(self, value)
             except TypeError:
-                raise LexerError("Lexer rules must be string or function (Lexer-Parser, value (string) as arguments)")
+                raise LexerError("Lexer rules must be string or function (Lexer, value (string) as arguments)")
 
             if isinstance(token_type, str):
                 pass

@@ -320,6 +320,22 @@ class LexerDFA(FiniteAutomata):
     # Counter for state id
     _ids = count(0)
 
+    def transition(self, lookout):
+        """
+        Follow the lookout and return the next state, None if no state is attained from the lookout
+        """
+        ascii = ord(lookout)
+
+        value = binary_search_on_transitions(ascii, self.next_states)
+
+        return value[1] if value else value
+
+    def sort_lookouts(self):
+        """
+        Sort self.next_states by lookouts so they can be easily searched afterward
+        """
+        self.next_states.sort(cmp=lambda x, y: interval_cmp(x[0], y[0]))
+
     @staticmethod
     def build_from_nfa(nfa):
         """
@@ -466,6 +482,9 @@ class LexerDFA(FiniteAutomata):
             for lookout, target in minimum_dfa[sub_id]['transitions'].items():
                 if target:
                     node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
+
+            # We sort the lookouts for easy recovery
+            node.sort_lookouts()
 
         # Finally we recover the starting node to return it
         initial_node_id = None
@@ -671,6 +690,27 @@ def interval_cmp(x, y):
         return 0
 
 
+def binary_search_on_transitions(target, transitions):
+    """
+    Binary search for intervals in a sorted list using interval_cmp for comparisons
+    """
+    left = 0
+    right = len(transitions) - 1
+
+    while left <= right:
+        index = (left + right) / 2
+        min, max = transitions[index][0]
+
+        if target < min:
+            right = index - 1
+        elif target > max:
+            left = index + 1
+        else:
+            return transitions[index]
+
+    return None
+
+
 def value_is_in_range(value, range):
     """
     :param value: an int (x)
@@ -710,7 +750,6 @@ def merge_intervals(intervals):
     merged_intervals.append((min, max))
 
     return merged_intervals
-
 
 
 def set_to_intervals(ascii_set):
