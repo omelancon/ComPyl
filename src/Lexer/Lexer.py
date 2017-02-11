@@ -56,7 +56,26 @@ class Lexer:
     """
 
     class LexerController:
-        pass
+        """
+        A class to generate intermediate objects to be passed to tokens as functions, it provides the functions to do
+        basic changes to the Lexer without having access to the dfa and rules. It allows to increment lineno and pos
+        as well has having access to the buffer.
+        """
+        def __init__(self, master):
+            self.lineno = master.lineno
+            self.pos = master.pos
+            self.buffer = master.buffer
+
+            def increment_line(increment=1):
+                master.lineno += increment
+                self.lineno += increment
+
+            def increment_pos(increment=1):
+                master.lineno += increment
+                self.lineno += increment
+
+            self.increment_line = increment_line
+            self.increment_pos = increment_pos
 
     def __init__(self, buffer=None, rules=None, line_rule=None):
 
@@ -187,7 +206,8 @@ class Lexer:
             # if None is returned, it is interpreted as an ignored sequence
 
             try:
-                token_type = terminal_token(self, value)
+                controller = self.LexerController(self)
+                token_type = terminal_token(controller, value)
             except TypeError:
                 raise LexerError("Lexer rules must be string or function (Lexer, value (string) as arguments)")
 

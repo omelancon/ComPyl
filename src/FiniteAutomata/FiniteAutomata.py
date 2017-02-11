@@ -320,6 +320,12 @@ class LexerDFA(FiniteAutomata):
     # Counter for state id
     _ids = count(0)
 
+    def __copy__(self, memo):
+        """
+        Copy the LexerDFA nodes recursively
+        """
+        pass
+
     def transition(self, lookout):
         """
         Follow the lookout and return the next state, None if no state is attained from the lookout

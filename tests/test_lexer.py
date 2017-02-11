@@ -7,7 +7,7 @@ number = "[1-9][0-9]*"
 decimal = number + "\.[0-9]+"
 
 def INT(t, v):
-    print v
+    t.increment_line()
     return "INT"
 
 rules = [
