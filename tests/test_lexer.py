@@ -1,7 +1,5 @@
 from src.Lexer.Lexer import Lexer
-from src.FiniteAutomata import FiniteAutomata
 from src.Visual import visual_lexer
-import sre_parse
 
 number = "[1-9][0-9]*"
 decimal = number + "\.[0-9]+"
@@ -20,8 +18,7 @@ rules = [
     ("#.*", None)
 ]
 
-lexer = Lexer()
-lexer.add_rules(rules)
+lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
 lexer.build()
 

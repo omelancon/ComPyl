@@ -1,4 +1,5 @@
 import sre_parse
+import copy
 from itertools import count
 
 
@@ -26,7 +27,8 @@ class FiniteAutomata(object):
     EMPTY = (-1, -1)
 
     # Special terminal values
-    IGNORED = object()
+    # I originally wanted to create an object for that, but it fails when pickling
+    IGNORED = -1
 
     # Maximum number of repetition of a same lookout handled, anything above is considered as infinite repetition
     max_handled_repeat = 100
@@ -43,7 +45,7 @@ class FiniteAutomata(object):
 
         # Allows to by pass the default max_repeat_handled of the class
         if max_handled_repeat:
-            self.max_repeat_handled = max_handled_repeat
+            self.max_handled_repeat = max_handled_repeat
 
     def __str__(self):
         return "<State '%d'>" % (self.id)
@@ -120,8 +122,10 @@ class FiniteAutomata(object):
         if not self.terminal_exists():
             if terminal_token is None:
                 self._set_terminal_to_ignored()
-            else:
+            elif isinstance(terminal_token, str) or callable(terminal_token):
                 self.terminal_token = terminal_token
+            else:
+                raise ValueError("The terminal token must be a string, a function, or None if the rule is ignored")
 
     def _set_terminal_to_ignored(self):
         """
@@ -131,7 +135,7 @@ class FiniteAutomata(object):
             self.terminal_token = self.IGNORED
 
     def terminal_is_ignored(self):
-        return self.terminal_token is self.IGNORED
+        return self.terminal_token == self.IGNORED
 
     def terminal_exists(self):
         if self.terminal_token:
@@ -322,9 +326,28 @@ class LexerDFA(FiniteAutomata):
 
     def __copy__(self, memo):
         """
-        Copy the LexerDFA nodes recursively
+        Copy the LexerDFA node, linking it to the next states without copying those
         """
-        pass
+        dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token), max_handled_repeat=self.max_handled_repeat)
+        dup.next_states = {lookout: state for lookout, state in self.next_states}
+
+        return dup
+
+    def __deepcopy__(self, memo):
+        """
+        Copy the LexerDFA node, recursively copying the next_states
+        """
+        if id(self) in memo:
+            return memo[id(self)]
+
+        else:
+            dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token), max_handled_repeat=self.max_handled_repeat)
+            dup.id = self.id
+            memo[id(self)] = dup
+            if dup.id == 2:
+                pass
+            dup.next_states = [(lookout, state.__deepcopy__(memo)) for lookout, state in self.next_states]
+            return dup
 
     def transition(self, lookout):
         """

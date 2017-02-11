@@ -1,5 +1,5 @@
 import re
-import pickle
+import dill as pickle
 
 from ..FiniteAutomata.FiniteAutomata import LexerDFA, NodeIsNotTerminalState
 
@@ -106,12 +106,12 @@ class Lexer:
         """
         Copy the lexer with its rules and current state
         """
-        # TODO: Copy the FSA
         dup = Lexer(buffer=self.buffer,
                     rules=self.rules,
                     line_rule=self.line_rule)
         dup.lineno = self.lineno
         dup.pos = self.pos
+        dup.dfa = self.dfa.__deepcopy__({}) if self.dfa else None
 
         return dup
 
