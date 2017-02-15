@@ -1,4 +1,5 @@
 import re
+import copy
 import dill as pickle
 
 from ..FiniteAutomata.FiniteAutomata import LexerDFA, NodeIsNotTerminalState
@@ -12,6 +13,7 @@ class Token:
     """
     Basic token built by the lexer
     """
+
     def __init__(self, type, value, lineno=None):
         self.type = type
         self.value = value
@@ -61,6 +63,7 @@ class Lexer:
         basic changes to the Lexer without having access to the dfa and rules. It allows to increment lineno and pos
         as well has having access to the buffer.
         """
+
         def __init__(self, master):
             self.lineno = master.lineno
             self.pos = master.pos
@@ -77,7 +80,7 @@ class Lexer:
             self.increment_line = increment_line
             self.increment_pos = increment_pos
 
-    def __init__(self, buffer=None, rules=None, line_rule=None):
+    def __init__(self, buffer=None, rules=None, line_rule=None, params=None):
 
         self.lineno = 1
         self.pos = 0
@@ -86,6 +89,7 @@ class Lexer:
         self.line_rule = None
         self.dfa = None
         self.current_state = None
+        self.params = params if params else {}
 
         if buffer:
             self.read(buffer)
@@ -98,20 +102,46 @@ class Lexer:
 
     def __copy__(self):
         """
-        Copy the lexer with its rules
+        Copy the lexer, but reuse the same DFA
         """
-        return Lexer(rules=self.rules, line_rule=self.line_rule)
+        dup = Lexer(rules=copy.copy(self.rules),
+                    line_rule=copy.copy(self.line_rule),
+                    params=copy.copy(self.params)
+                    )
+        dup.lineno = self.lineno
+        dup.pos = self.pos
+        dup.buffer = self.buffer
+
+        # The following reuse existing objects, not deep-copying
+        dup.params = self.params
+        dup.current_state = self.current_state
+        dup.dfa = self.dfa
+
+        return dup
 
     def __deepcopy__(self, memo):
         """
-        Copy the lexer with its rules and current state
+        Copy the lexer with its rules and DFA
         """
-        dup = Lexer(buffer=self.buffer,
-                    rules=self.rules,
-                    line_rule=self.line_rule)
+        dup = Lexer(rules=copy.copy(self.rules),
+                    line_rule=copy.copy(self.line_rule),
+                    params=copy.copy(self.params)
+                    )
         dup.lineno = self.lineno
         dup.pos = self.pos
-        dup.dfa = self.dfa.__deepcopy__({}) if self.dfa else None
+        dup.buffer = self.buffer
+
+        # The following need to copy objects
+        dup.params = copy.deepcopy(self.params)
+        dup.dfa = copy.deepcopy(self.dfa)
+
+        if self.current_state is None:
+            dup.current_state = None
+        else:
+            dup.current_state = LexerDFA.get_state_by_id(self.current_state.id, dup.dfa)
+
+            if dup.current_state is None:
+                raise LexerError("Error when trying to copy the DFA, the current state could not be retrieved.")
 
         return dup
 

@@ -344,10 +344,33 @@ class LexerDFA(FiniteAutomata):
             dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token), max_handled_repeat=self.max_handled_repeat)
             dup.id = self.id
             memo[id(self)] = dup
-            if dup.id == 2:
-                pass
             dup.next_states = [(lookout, state.__deepcopy__(memo)) for lookout, state in self.next_states]
+
             return dup
+
+    @staticmethod
+    def get_state_by_id(id, dfa):
+        """
+        Return the first node found corresponding to the given id. A DFA node id should be unique.
+        """
+        seen_nodes = set()
+        todo_nodes = [dfa]
+
+        while todo_nodes:
+            node = todo_nodes.pop()
+
+            if node.id == id:
+                return node
+
+            else:
+                seen_nodes.add(node)
+
+                for _, state in node.next_states:
+
+                    if state not in seen_nodes:
+                        todo_nodes.append(state)
+
+        return None
 
     def transition(self, lookout):
         """
