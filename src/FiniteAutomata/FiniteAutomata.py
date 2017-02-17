@@ -320,6 +320,56 @@ class LexerNFA(FiniteAutomata):
         return _group
 
 
+class DFA:
+    def __init__(self, rules=None):
+        self.start = None
+        self.current_state = None
+
+        if rules:
+            self.build(rules)
+
+    def build(self, rules):
+        """
+        Build the DFA according to the given rules, save its starting node as self.start and initialize its curent_state
+        to the start
+        """
+        nfa_start = LexerNFA()
+        nfa_start.build(rules)
+
+        dfa_start = LexerDFA.build_from_nfa(nfa_start)
+
+        # The building algorithm do a poor job at labelling the dfa nodes in a decent order
+        dfa_start.relabel_states()
+
+        self.start = self.current_state = dfa_start
+
+    def transition(self, lookout):
+        """
+        Make the current_state transition with the given lookout, update it and return it. Return None if the lookout
+        yields no legal transition.
+        """
+        pass
+
+    def reset_current_state(self):
+        """
+        Set back the current state to start
+        """
+        pass
+
+    def get_current_state_terminal(self):
+        """
+        Return the terminal of the current state. Return None if it is an ignored terminal.
+        Raise 'NodeIsNotTerminalState' if the node is not a terminal.
+        """
+        pass
+
+    def get_state_by_id(self, id):
+        """
+        Return the first state found with given 'id' (should be unique), None if no such state exsits
+        """
+        pass
+
+
 class LexerDFA(FiniteAutomata):
     # Counter for state id
     _ids = count(0)

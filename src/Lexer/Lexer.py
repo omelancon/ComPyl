@@ -61,13 +61,18 @@ class Lexer:
         """
         A class to generate intermediate objects to be passed to tokens as functions, it provides the functions to do
         basic changes to the Lexer without having access to the dfa and rules. It allows to increment lineno and pos
-        as well has having access to the buffer.
+        as well has having access to the buffer and params dict.
+
+        A word on the fact that params is entirely accessible and actually points to the Lexer: we allow this instead of
+        providing functions for reading/updating the params because it doesn't play a role in the inner logic of the
+        lexer, thus it is ok to directly mutate it.
         """
 
         def __init__(self, master):
             self.lineno = master.lineno
             self.pos = master.pos
             self.buffer = master.buffer
+            self.params = master.params
 
             def increment_line(increment=1):
                 master.lineno += increment

@@ -4,9 +4,11 @@ from src.Visual import visual_lexer
 number = "[1-9][0-9]*"
 decimal = number + "\.[0-9]+"
 
+
 def INT(t, v):
-    t.increment_line()
+    t.params[v] = "I have seen that one"
     return "INT"
+
 
 rules = [
     (number, INT),
