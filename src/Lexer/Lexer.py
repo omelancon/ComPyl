@@ -1,8 +1,8 @@
 import re
 import copy
-import dill as pickle
+import dill
 
-from ..FiniteAutomata.FiniteAutomata import LexerDFA, NodeIsNotTerminalState
+from ..FiniteAutomata.NodeFiniteAutomaton import DFA, NodeIsNotTerminalState
 
 
 class LexerError(Exception):
@@ -35,20 +35,22 @@ class Token:
 
 class Lexer:
     """
-    Tokenize a string given a set of rules by building a FiniteAutomata.
+    Tokenize a string given a set of rules by building a Deterministic Finite Automaton.
 
     Rules must be provided to Lexer.add_rules as a list of tuple (regex, rule) which first element is a regular
     expressions and second element is a string/function/None.
     If a rule is given as string, the Lexer returns a token with the string as token type.
-    If a rule is given as function, the Lexer calls the function with Lexer and matched pattern as arguments
-    and takes return value as token type, this allows mainly to increment lines manually or do change to the Lexer.
-    If None is given as rule, the Lexer interprets the regular expression as a pattern to be ignored (in practice this
-    is mostly for spaces, comments, etc.)
+    If a rule is given as function, the Lexer calls the function with a LexerController and matched pattern as arguments
+    and takes return value as token type. See LexerController subclass to see what the function will have access to.
+    If None is given as rule, the Lexer interprets the regular expression as a pattern to be ignored (by example for
+    spaces, comments, etc.)
 
     As stated above, a function can be passed as rule to increment Lexer.lineno, although this is not the correct way
     to do line incrementation. Lexer has a line_rule attribute which can be set with Lexer.set_line_rule, this will
     automatically increment line number when the pattern is encountered. In particular, this will increment Lexer.lineno
-    even if the pattern is encountered inside another pattern (a multi-line comments for say).
+    even if the pattern is encountered inside another pattern (a multi-line comments for say). Lexer.set_line_rule,
+    takes a tuple (regex, rule) as argument. Doing so will also pre-compute regexp intersections in later versions to
+    make this option even more efficient.
 
     Lexer.read appends a string to the current buffer
 
@@ -59,9 +61,9 @@ class Lexer:
 
     class LexerController:
         """
-        A class to generate intermediate objects to be passed to tokens as functions, it provides the functions to do
-        basic changes to the Lexer without having access to the dfa and rules. It allows to increment lineno and pos
-        as well has having access to the buffer and params dict.
+        A class to generate intermediate objects to be passed to tokens as functions, it provides the methods to do
+        basic changes to the Lexer without having access to the DFA and rules. It allows to increment lineno with
+        increment_line() and pos with increment_pos() as well has having access to the buffer and params dict.
 
         A word on the fact that params is entirely accessible and actually points to the Lexer: we allow this instead of
         providing functions for reading/updating the params because it doesn't play a role in the inner logic of the
@@ -87,13 +89,25 @@ class Lexer:
 
     def __init__(self, buffer=None, rules=None, line_rule=None, params=None):
 
+        # Line number of the pointer
         self.lineno = 1
+
+        # Position of the pointer in the buffer
         self.pos = 0
+
+        # Code/string to be tokenized by the lexer
         self.buffer = ""
+
+        # List of rules
         self.rules = []
+
+        # A special way to implement the line rule
         self.line_rule = None
+
+        # The Deterministic Finite Automaton that will be later build to tokenize the buffer
         self.dfa = None
-        self.current_state = None
+
+        # A dict of params that is accessible to rules as functions
         self.params = params if params else {}
 
         if buffer:
@@ -119,7 +133,6 @@ class Lexer:
 
         # The following reuse existing objects, not deep-copying
         dup.params = self.params
-        dup.current_state = self.current_state
         dup.dfa = self.dfa
 
         return dup
@@ -139,14 +152,6 @@ class Lexer:
         # The following need to copy objects
         dup.params = copy.deepcopy(self.params)
         dup.dfa = copy.deepcopy(self.dfa)
-
-        if self.current_state is None:
-            dup.current_state = None
-        else:
-            dup.current_state = LexerDFA.get_state_by_id(self.current_state.id, dup.dfa)
-
-            if dup.current_state is None:
-                raise LexerError("Error when trying to copy the DFA, the current state could not be retrieved.")
 
         return dup
 
@@ -169,19 +174,21 @@ class Lexer:
             self.rules.append((regex, rule))
 
     def build(self):
-        self.dfa = LexerDFA.build(self.rules)
+        self.dfa = DFA(self.rules)
 
     def save(self, filename="lexer.p"):
         file = open(filename, "wb")
-        pickle.dump(self, file)
+        dill.dump(self, file)
 
     @staticmethod
     def load(path):
+
+        file = open(path, "rb")
+
         try:
-            file = open(path, "rb")
-            lexer = pickle.load(file)
-        except pickle.PickleError:
-            raise LexerError("The file " + path + " cannot be loaded by pickle")
+            lexer = dill.load(file)
+        finally:
+            file.close()
 
         if isinstance(lexer, Lexer):
             return lexer
@@ -195,29 +202,30 @@ class Lexer:
             return None
 
         # Start at empty state of DFA
-        self.current_state = self.dfa
+        self.dfa.reset_current_state()
 
         init_pos = self.pos
         terminal_token = None
 
         # Step through the Finite State Automaton
         while True:
+            end_of_buffer = False
             try:
                 lookout = self.buffer[self.pos]
-                lookout_state = self.current_state.transition(lookout)
             except IndexError:
                 # End of buffer
-                lookout_state = None
+                end_of_buffer = True
+
+            lookout_state = None if end_of_buffer else self.dfa.push(lookout)
 
             if lookout_state is None:
                 try:
-                    terminal_token = self.current_state.get_terminal_token()
+                    terminal_token = self.dfa.get_current_state_terminal()
                 except NodeIsNotTerminalState:
                     raise LexerError("Syntax error at line %s" % self.lineno)
 
                 break
 
-            self.current_state = lookout_state
             self.pos += 1
 
         # Exited the FSA, a terminal instruction was given
@@ -231,29 +239,31 @@ class Lexer:
             ignore = True
 
         elif isinstance(terminal_token, str):
-            # Case where the terminal token is not a function, but the token name as string
+            # Case where the terminal token is a string
             token = Token(terminal_token, value, lineno=self.lineno)
 
         else:
             # Case where the terminal token is a function to be called
-            # We expect rule to be a function Lexer-Parser -> string/None
+            # We expect rule to be a function LexerController -> string -> string/None
             # if a string is returned, it is taken as the Token type
             # if None is returned, it is interpreted as an ignored sequence
 
+            controller = self.LexerController(self)
+
             try:
-                controller = self.LexerController(self)
                 token_type = terminal_token(controller, value)
             except TypeError:
-                raise LexerError("Lexer rules must be string or function (Lexer, value (string) as arguments)")
+                raise LexerError("Lexer rules must be string or function LexerController -> string -> string/None")
 
             if isinstance(token_type, str):
                 pass
             elif token_type is None:
                 ignore = True
             else:
-                raise LexerError("Lexer rules functions must return string or None")
+                raise LexerError("Lexer rules as functions must return string or None")
 
-            token = Token(token_type, value, lineno=self.lineno)
+            if not ignore:
+                token = Token(token_type, value, lineno=self.lineno)
 
         # Auto-increment the line number by checking if line_rule match in the match
         # TODO: This makes the lexer a 2 pass lexer, we could improve that by precomputing if linerule and current

@@ -1,8 +1,8 @@
-from src.FiniteAutomata import FiniteAutomata
+from src.FiniteAutomata import NodeFiniteAutomaton
 import re
 import sre_compile
 
-empty_node = FiniteAutomata.FiniteAutomata()
+empty_node = NodeFiniteAutomaton.NodeFiniteAutomaton()
 
 print empty_node
 
@@ -14,10 +14,10 @@ sentence = "[a-z]b+g*a\\*"
 
 print sentence
 
-for c in FiniteAutomata.parse_regexp(sentence):
+for c in NodeFiniteAutomaton.parse_regexp(sentence):
 	print c
 
-a = FiniteAutomata.parse_regexp("ab[cd]h*")
+a = NodeFiniteAutomaton.parse_regexp("ab[cd]h*")
 a.getwidth()
 print a
 
@@ -37,7 +37,7 @@ rules = [
     ("[a-z]+", "ID")
 ]
 
-a = FiniteAutomata.LexerDFA()
+a = NodeFiniteAutomaton.NodeDFA()
 
 a.build(rules)
 print a

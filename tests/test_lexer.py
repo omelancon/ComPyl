@@ -24,7 +24,7 @@ lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
 lexer.build()
 
-visual_lexer.plot_dfa(lexer.dfa)
+visual_lexer.plot_dfa(lexer.dfa.start)
 
 buffer = """1 + 3.08 * 5 = 1.54
 # We can put some comments here
