@@ -1,5 +1,6 @@
 from src.Lexer.Lexer import Lexer
 from src.Visual import visual_lexer
+import copy
 
 number = "[1-9][0-9]*"
 decimal = number + "\.[0-9]+"
@@ -32,8 +33,14 @@ buffer = """1 + 3.08 * 5 = 1.54
 
 lexer.read(buffer)
 
+new = copy.deepcopy(lexer)
+
+new.save("test.p")
+
+loaded = Lexer.load("test.p")
+
 tk = True
 
 while tk:
-    tk = lexer.lex()
+    tk = loaded.lex()
     print tk
