@@ -4,9 +4,11 @@ from src.Visual import visual_lexer
 number = "[1-9][0-9]*"
 decimal = number + "\.[0-9]+"
 
+
 def INT(t, v):
-    t.increment_line()
+    t.params[v] = "I have seen that one"
     return "INT"
+
 
 rules = [
     (number, INT),
@@ -22,7 +24,7 @@ lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
 lexer.build()
 
-visual_lexer.plot_dfa(lexer.dfa)
+visual_lexer.plot_dfa(lexer.dfa.start)
 
 buffer = """1 + 3.08 * 5 = 1.54
 # We can put some comments here

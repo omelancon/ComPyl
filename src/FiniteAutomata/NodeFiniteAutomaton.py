@@ -3,38 +3,27 @@ import copy
 from itertools import count
 
 
+class FiniteAutomatonError(Exception):
+    pass
+
+
 class NodeIsNotTerminalState(Exception):
     pass
 
 
-class NodeAlreadyHasTerminalToken(Exception):
-    pass
-
-
-class LostInitialState(Exception):
-    pass
-
-
-class FiniteAutomata(object):
+class NodeFiniteAutomaton(object):
     """
-    Basic skeleton for Deterministic and Non-deterministic Finite Automata.
-    A FiniteAutomata object is a node of the graph representation of the automata.
+    Basic skeleton for graph representation of Deterministic and Non-deterministic Finite Automata nodes.
     """
-    # Counter for state id
-    _ids = count(0)
-
     # Special lookout values
     EMPTY = (-1, -1)
 
-    # Special terminal values
-    # I originally wanted to create an object for that, but it fails when pickling
+    # Special terminal values reserved for a terminal state that is ignored (no returned token)
     IGNORED = -1
 
-    # Maximum number of repetition of a same lookout handled, anything above is considered as infinite repetition
-    max_handled_repeat = 100
-
-    def __init__(self, terminal_token=None, max_handled_repeat=None):
-        self.id = self._ids.next()
+    def __init__(self, terminal_token=None, counter=None):
+        # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
+        self.id = counter.next() if counter else id(self)
 
         # List of next states from current state.
         # Elements of the list are tuples (lookout, next state), lookout takes the range format (min_ascii, max_ascii)
@@ -43,35 +32,8 @@ class FiniteAutomata(object):
         # Terminal token is intended to be either a string or a function returning a string
         self.terminal_token = terminal_token
 
-        # Allows to by pass the default max_repeat_handled of the class
-        if max_handled_repeat:
-            self.max_handled_repeat = max_handled_repeat
-
     def __str__(self):
         return "<State '%d'>" % (self.id)
-
-    def relabel_states(self, start=0):
-        """
-        Relabel the states' ids (self.id) from start.
-        Note that this must be called from the starting state to relabel correctly, without duplicates
-        """
-        def rec_relabel(state, relabeled=None):
-            if not relabeled:
-                relabeled = []
-
-            state.id = self._ids.next()
-
-            for _, state in state.next_states:
-                if state not in relabeled:
-                    relabeled.append(state)
-                    rec_relabel(state, relabeled=relabeled)
-
-
-
-        # Reinitialize the counter
-        self.__class__._ids = count(start)
-
-        rec_relabel(self)
 
     def add_transition_range(self, min_ascii, max_ascii, *args, **kwargs):
         """
@@ -89,7 +51,7 @@ class FiniteAutomata(object):
 
     def add_empty_transition(self, *args, **kwargs):
         """
-        Same ad add_transition, but for an empty string match
+        Same as add_transition, but for an empty string match
         """
         new_state = self.__class__(*args, **kwargs)
         self.next_states.append((self.EMPTY, new_state))
@@ -117,7 +79,8 @@ class FiniteAutomata(object):
 
     def set_terminal_token(self, terminal_token):
         """
-        Set the terminal token if it is not already set to another value
+        Set the terminal token if it is not already set to another value.
+        To set the corresponding state to be an accepted, but ignored, state, let terminal_token be None
         """
         if not self.terminal_exists():
             if terminal_token is None:
@@ -125,7 +88,8 @@ class FiniteAutomata(object):
             elif isinstance(terminal_token, str) or callable(terminal_token):
                 self.terminal_token = terminal_token
             else:
-                raise ValueError("The terminal token must be a string, a function, or None if the rule is ignored")
+                raise FiniteAutomatonError(
+                    "The terminal token must be a string, a function, or None")
 
     def _set_terminal_to_ignored(self):
         """
@@ -159,93 +123,22 @@ class FiniteAutomata(object):
             raise NodeIsNotTerminalState
 
 
-class LexerNFA(FiniteAutomata):
-    # Counter for state id
-    _ids = count(0)
-
+class NodeNFA(NodeFiniteAutomaton):
     def __init__(self, *args, **kwargs):
-        super(LexerNFA, self).__init__(*args, **kwargs)
+        super(NodeNFA, self).__init__(*args, **kwargs)
+
         self.terminal_priority = kwargs['terminal_priority'] if 'terminal_priority' in kwargs else None
         self.epsilon_star_group = None
 
     def set_terminal_token(self, terminal_token, priority=None):
         """
-        Set the terminal token if it is not already set to another value
+        Extend the 'set_terminal_token' method of NodeFiniteAutomaton to set a terminal token and additionally set
+        the priority of the terminal (which is required for the NFA -> DFA step).
         """
+        super(NodeNFA, self).set_terminal_token(terminal_token)
+
         if not self.terminal_exists():
-            if terminal_token is None:
-                self._set_terminal_to_ignored()
-            else:
-                self.terminal_token = terminal_token
-
             self.terminal_priority = priority
-
-    def add_rule(self, regexp):
-        """
-        Add the given rule to the NFA.
-        See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
-        :param regexp: A parsed regexp formated as a RegexpTree object
-        :param token: the token returned by the rule (a string or a function FiniteAutomata -> string -> string)
-        :return: a tuple (first, last) where first and last are respectively the first and last nodes of the rule
-        """
-
-        if regexp is not None:
-
-            first = self.add_empty_transition()
-
-            if regexp.type == 'single':
-                min_ascii = regexp.min_ascii
-                max_ascii = regexp.max_ascii
-
-                next = first.add_transition_range(min_ascii, max_ascii)
-                _, last = next.add_rule(regexp.next)
-
-            elif regexp.type == 'union':
-                fst_branch = first.add_rule(regexp.fst)
-                snd_branch = first.add_rule(regexp.snd)
-
-                next = fst_branch[1].add_empty_transition()
-                snd_branch[1].add_empty_transition_to_state(next)
-
-                _, last = next.add_rule(regexp.next)
-
-            elif regexp.type == 'kleene':
-                # The regexp A* leads to the following NFA
-                #
-                # self ---> first ---> s1 -A-> s2 ---> s3 (ACCEPT)
-                #             |          ^------|       ^
-                #             |-------------------------|
-                #
-                # See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
-
-                s1, s2 = first.add_rule(regexp.pattern)
-                s3 = s2.add_empty_transition()
-                # There should be a unique empty transition at this point
-
-                s2.add_empty_transition_to_state(s1)
-                first.add_empty_transition_to_state(s3)
-
-                last = s3
-
-                _, last = last.add_rule(regexp.next)
-
-            else:
-                raise RegexpTreeException("RegexpTree type found does not match 'single', 'union' or 'kleene'")
-
-            return first, last
-
-        else:
-            return self, self
-
-    def build(self, rules, max_handled_repeat=100):
-
-        current_rule_priority = 1
-
-        for rule, token in rules:
-            formated_rule = format_regexp(rule, max_handled_repeat=max_handled_repeat)
-            _, terminal_node = self.add_rule(formated_rule)
-            terminal_node.set_terminal_token(token, priority=current_rule_priority)
-            current_rule_priority += 1
 
     def get_transition_states_for_lookout(self, lookout):
         """
@@ -320,67 +213,40 @@ class LexerNFA(FiniteAutomata):
         return _group
 
 
-class LexerDFA(FiniteAutomata):
-    # Counter for state id
-    _ids = count(0)
-
-    def __copy__(self, memo):
+class NodeDFA(NodeFiniteAutomaton):
+    def __copy__(self):
         """
-        Copy the LexerDFA node, linking it to the next states without copying those
+        Copy the NodeDFA node, linking it to the next states without copying those
         """
-        dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token), max_handled_repeat=self.max_handled_repeat)
+        dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
+        dup.id = self.id
         dup.next_states = {lookout: state for lookout, state in self.next_states}
 
         return dup
 
     def __deepcopy__(self, memo):
         """
-        Copy the LexerDFA node, recursively copying the next_states
+        Copy the NodeDFA node, recursively copying the next_states
         """
         if id(self) in memo:
             return memo[id(self)]
 
         else:
-            dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token), max_handled_repeat=self.max_handled_repeat)
+            dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
             dup.id = self.id
             memo[id(self)] = dup
             dup.next_states = [(lookout, state.__deepcopy__(memo)) for lookout, state in self.next_states]
 
             return dup
 
-    @staticmethod
-    def get_state_by_id(id, dfa):
+    def transition(self, ascii):
         """
-        Return the first node found corresponding to the given id. A DFA node id should be unique.
+        Follow the lookout and return the next state, None if no state is attained from the lookout.
+        Before transitions can be executed, the state has to have its 'next_states' list sorted with sort_lookouts()
         """
-        seen_nodes = set()
-        todo_nodes = [dfa]
-
-        while todo_nodes:
-            node = todo_nodes.pop()
-
-            if node.id == id:
-                return node
-
-            else:
-                seen_nodes.add(node)
-
-                for _, state in node.next_states:
-
-                    if state not in seen_nodes:
-                        todo_nodes.append(state)
-
-        return None
-
-    def transition(self, lookout):
-        """
-        Follow the lookout and return the next state, None if no state is attained from the lookout
-        """
-        ascii = ord(lookout)
-
         value = binary_search_on_transitions(ascii, self.next_states)
 
-        return value[1] if value else value
+        return value[1] if value else None
 
     def sort_lookouts(self):
         """
@@ -388,8 +254,196 @@ class LexerDFA(FiniteAutomata):
         """
         self.next_states.sort(cmp=lambda x, y: interval_cmp(x[0], y[0]))
 
+
+class DFA:
+    def __init__(self, rules=None):
+        self.start = None
+        self.current_state = None
+
+        if rules:
+            self.build(rules)
+
+    def __copy__(self):
+        """
+        Identical as deepcopy as their is no point at returning a shallow copy
+        """
+        return self.__deepcopy__({})
+
+    def __deepcopy__(self, memo):
+        """
+        Return a copy of the DFA with a deepcopy of the graph
+        """
+        dup = DFA()
+
+        dup.start = copy.deepcopy(self.start)
+        dup.current_state = dup.get_dfa_state_by_id(self.current_state.id)
+
+        return dup
+
+    def build(self, rules):
+        """
+        Build the DFA according to the given rules, save its starting node as self.start and initialize its
+        current_state to the start
+        """
+        nfa_start = self.build_nfa_from_rules(rules)
+
+        dfa_start = self.build_dfa_from_nfa(nfa_start)
+
+        # The states are currently labelled with Python built-in id function, for aestheticism we give a nice ordering
+        DFA.relabel_states_of_dfa(dfa_start)
+
+        self.start = self.current_state = dfa_start
+
+    def push(self, lookout):
+        """
+        Make the current_state transition with the given lookout, update it and return it. Return None if the lookout
+        yields no legal transition.
+        """
+        ascii = ord(lookout)
+
+        transition_state = self.current_state.transition(ascii)
+
+        # Do not update if there was no legal transition
+        if transition_state:
+            self.current_state = transition_state
+
+        return transition_state
+
+    def reset_current_state(self):
+        """
+        Set back the current state to start
+        """
+        self.current_state = self.start
+
+    def get_current_state_terminal(self):
+        """
+        Return the terminal of the current state. Return None if it is an ignored terminal.
+        Will raise 'NodeIsNotTerminalState' if the node is not a terminal.
+        """
+        return self.current_state.get_terminal_token()
+
+    def get_dfa_state_by_id(self, id):
+        """
+        Return the first state found with given 'id' (should be unique), None if no such state exists
+        This is used when copying to recover the copied current_state object
+        """
+        seen_states = set()
+        todo_states = [self.start]
+
+        while todo_states:
+            state = todo_states.pop()
+
+            if state.id == id:
+                return state
+
+            else:
+                seen_states.add(state)
+
+            for _, child_state in state.next_states:
+                if child_state not in seen_states:
+                    todo_states.append(child_state)
+
+        return None
+
     @staticmethod
-    def build_from_nfa(nfa):
+    def relabel_states_of_dfa(start, count_from=0):
+        """
+        Relabel the states' ids of the DFA, strating at 'start'.
+        """
+
+        def rec_relabel(state, counter, relabeled):
+            state.id = counter.next()
+
+            for _, child_state in state.next_states:
+                if child_state not in relabeled:
+                    relabeled.add(child_state)
+                    rec_relabel(child_state, counter, relabeled)
+
+        counter = count(count_from)
+
+        rec_relabel(start, counter, set())
+
+    @staticmethod
+    def build_nfa_from_rules(rules):
+        """
+        Parse and add the rules one by one to an empty NFA, see add_rule_to_nfa for the rule-adding algorithm.
+        """
+        id_counter = count(0)
+
+        nfa_start = NodeNFA()
+
+        # The rule priority has to be written in the NFA, later when the nodes are merged to form a DFA, it resolved
+        # conflicts when a string attains more than one terminal node in the NFA
+        current_rule_priority = 1
+
+        for rule, token in rules:
+            formated_rule = format_regexp(rule)
+            _, terminal_node = DFA.add_rule_to_nfa(nfa_start, formated_rule)
+            terminal_node.set_terminal_token(token, priority=current_rule_priority)
+            current_rule_priority += 1
+
+        return nfa_start
+
+    @staticmethod
+    def add_rule_to_nfa(nfa_start, regexp):
+        """
+        Add the given rule to the NFA.
+        See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
+        :param regexp: A parsed regexp formated as a RegexpTree object
+        :param token: the token returned by the rule (a string or a function NodeFiniteAutomaton -> string -> string)
+        :return: a tuple (first, last) where first and last are respectively the first and last nodes of the rule
+        """
+
+        if regexp is not None:
+
+            first = nfa_start.add_empty_transition()
+
+            if regexp.type == 'single':
+                min_ascii = regexp.min_ascii
+                max_ascii = regexp.max_ascii
+
+                next = first.add_transition_range(min_ascii, max_ascii)
+                _, last = DFA.add_rule_to_nfa(next, regexp.next)
+
+            elif regexp.type == 'union':
+                fst_branch = DFA.add_rule_to_nfa(first, regexp.fst)
+                snd_branch = DFA.add_rule_to_nfa(first, regexp.snd)
+
+                next = fst_branch[1].add_empty_transition()
+                snd_branch[1].add_empty_transition_to_state(next)
+
+                _, last = DFA.add_rule_to_nfa(next, regexp.next)
+
+            elif regexp.type == 'kleene':
+                # The regexp A* leads to the following NFA
+                #
+                # self ---> first ---> s1 -A-> s2 ---> s3 (ACCEPT)
+                #             |          ^------|       ^
+                #             |-------------------------|
+                #
+                # See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
+
+                s1, s2 = DFA.add_rule_to_nfa(first, regexp.pattern)
+                s3 = s2.add_empty_transition()
+                # There should be a unique empty transition at this point
+
+                s2.add_empty_transition_to_state(s1)
+                first.add_empty_transition_to_state(s3)
+
+                last = s3
+
+                _, last = DFA.add_rule_to_nfa(last, regexp.next)
+
+            else:
+                raise RegexpTreeException("RegexpTree type found does not match 'single', 'union' or 'kleene'")
+
+            return first, last
+
+        else:
+            return nfa_start, nfa_start
+
+    @staticmethod
+    def build_dfa_from_nfa(nfa):
         """
         Generate the Deterministic Finite Automata corresponding to the given NFA
         """
@@ -408,7 +462,7 @@ class LexerDFA(FiniteAutomata):
         # of function get_minimal_covering_intervals for definition of a MCSI
         # EMPTY is not in the alphabet (epsilon is an element of A*, not in A, where A is the alphabet), so we remove it
         alphabet = get_minimal_covering_intervals(edges_lookouts)
-        alphabet.remove(LexerNFA.EMPTY)
+        alphabet.remove(NodeNFA.EMPTY)
 
         # ========================================================
         # Build the DFA table
@@ -517,10 +571,10 @@ class LexerDFA(FiniteAutomata):
         # ========================================================
         # Build the final data structure of the DFA
         # ========================================================
-        # dfa_nodes_table now contains all the information required to build the minimal DFA as a LexerDFA object
-        # We first create the LexerDFA nodes to link afterward
+        # dfa_nodes_table now contains all the information required to build the minimal DFA as a NodeDFA object
+        # We first create the NodeDFA nodes to link afterward
 
-        dfa_nodes_as_dict = {sub_id: LexerDFA() for sub_id in minimum_dfa}
+        dfa_nodes_as_dict = {sub_id: NodeDFA() for sub_id in minimum_dfa}
 
         for sub_id, node in dfa_nodes_as_dict.items():
 
@@ -545,21 +599,9 @@ class LexerDFA(FiniteAutomata):
                 initial_node_id = fset
                 break
         else:
-            raise LostInitialState("For unknown reason, the build algorithm lost its own initial state. Puzzling.")
+            raise FiniteAutomatonError("For unknown reason, the build algorithm lost its own initial state. Puzzling.")
 
         return dfa_nodes_as_dict[initial_node_id]
-
-    @staticmethod
-    def build(rules):
-        nfa = LexerNFA()
-        nfa.build(rules)
-
-        dfa = LexerDFA.build_from_nfa(nfa)
-
-        # The building algorithm do a poor job at labelling the dfa nodes in a decent order
-        dfa.relabel_states()
-
-        return dfa
 
 
 def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
@@ -862,6 +904,7 @@ def get_minimal_covering_intervals(intervals):
     This is a way here to partition the intervals of ascii values in the lookouts of an FDA to get the lookout values
     of a DFA
     """
+
     def rec(intervals):
         if not intervals:
             return []
@@ -969,17 +1012,17 @@ class RegexpTree():
         return exp if self.next is None else (exp + self.next.print_regexp())
 
 
-def format_regexp(regexp, max_handled_repeat=100):
+def format_regexp(regexp):
     """
     Take a regexp as string and return the equivalent RegexpTree.
     Use sre_parse to first tokenize the regexp, then translate it.
     """
 
     parsed_regexp = sre_parse.parse(regexp)
-    return sre_to_regexp_tree(parsed_regexp.data, max_handled_repeat=max_handled_repeat)
+    return sre_to_regexp_tree(parsed_regexp.data)
 
 
-def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
+def sre_to_regexp_tree(sre_regexp):
     """
     Take a regexp as sre_parse tokens list and return the equivalent RegexpTree.
     """
@@ -1020,7 +1063,7 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
                               )
 
         elif token_type == 'in':
-            return make_regexp_intervals_union(current_token, regexp_tail, max_handled_repeat=max_handled_repeat)
+            return make_regexp_intervals_union(current_token, regexp_tail)
 
         elif token_type == 'max_repeat':
             token_repeated = current_token[1][2]
@@ -1034,13 +1077,10 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
             max = current_token[1][1]
 
             if min > 0:
-                new_max = max - min if max <= max_handled_repeat else max
+                new_max = max - min if max <= 1000 else max
                 extension = min * token_repeated + [('max_repeat', (0, new_max, token_repeated))] + regexp_tail
-                return sre_to_regexp_tree(
-                    extension,
-                    max_handled_repeat=max_handled_repeat
-                )
-            elif 1 <= max <= max_handled_repeat:
+                return sre_to_regexp_tree(extension)
+            elif 1 <= max <= 1000:
                 branch_token = ('branch',
                                 (None,
                                  ([('max_repeat', (0, max - 1, token_repeated))],
@@ -1048,24 +1088,21 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
                                                     ])
                                  )
                                 )
-                return sre_to_regexp_tree(
-                    [branch_token] + regexp_tail,
-                    max_handled_repeat=max_handled_repeat
-                )
+                return sre_to_regexp_tree([branch_token] + regexp_tail)
 
             elif max == 0:
-                return sre_to_regexp_tree(regexp_tail, max_handled_repeat=max_handled_repeat)
+                return sre_to_regexp_tree(regexp_tail)
 
             # Case where min = 0, max = inf, i.e. a Kleene operator
             else:
                 return RegexpTree(
                     'kleene',
-                    sre_to_regexp_tree(token_repeated, max_handled_repeat=max_handled_repeat),
+                    sre_to_regexp_tree(token_repeated),
                     sre_to_regexp_tree(regexp_tail))
 
         elif token_type == 'branch':
             union_elements = current_token[1][1]
-            return make_regexp_sre_union(union_elements, regexp_tail, max_handled_repeat=max_handled_repeat)
+            return make_regexp_sre_union(union_elements, regexp_tail)
 
         elif token_type == 'subpattern':
 
@@ -1091,7 +1128,7 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
         raise
 
 
-def make_regexp_intervals_union(intervals, next, max_handled_repeat=100, already_in_intervals=False):
+def make_regexp_intervals_union(intervals, next, already_in_intervals=False):
     """
     Given a list of sre 'in', 'range and 'literal' tokens, return a union of those as RegexpTree
     """
@@ -1107,20 +1144,19 @@ def make_regexp_intervals_union(intervals, next, max_handled_repeat=100, already
     elif list_length == 1:
         min = intervals[0][0]
         max = intervals[0][1]
-        return RegexpTree('single', min, max, sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat))
+        return RegexpTree('single', min, max, sre_to_regexp_tree(next))
 
     else:
         fst = intervals[0]
         return RegexpTree(
             'union',
             RegexpTree('single', fst[0], fst[1], None),
-            make_regexp_intervals_union(intervals[1:], [], max_handled_repeat=max_handled_repeat,
-                                        already_in_intervals=True),
-            sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
+            make_regexp_intervals_union(intervals[1:], [], already_in_intervals=True),
+            sre_to_regexp_tree(next)
         )
 
 
-def make_regexp_sre_union(regexp_union, next, max_handled_repeat=100):
+def make_regexp_sre_union(regexp_union, next):
     """
     Given a list of sre parsed regexp, return a union of those as a RegexpTree.
     """
@@ -1130,14 +1166,14 @@ def make_regexp_sre_union(regexp_union, next, max_handled_repeat=100):
         return None
 
     elif list_length == 1:
-        regexp_tree = sre_to_regexp_tree(regexp_union[0], max_handled_repeat=max_handled_repeat)
+        regexp_tree = sre_to_regexp_tree(regexp_union[0])
         return regexp_tree
 
     else:
         fst_exp = regexp_union[0]
-        fst_branch = sre_to_regexp_tree(fst_exp, max_handled_repeat=max_handled_repeat)
-        snd_branch = make_regexp_sre_union(regexp_union[1:], [], max_handled_repeat=max_handled_repeat)
-        next_branch = sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
+        fst_branch = sre_to_regexp_tree(fst_exp)
+        snd_branch = make_regexp_sre_union(regexp_union[1:], [])
+        next_branch = sre_to_regexp_tree(next)
 
         # It happens that both branches were empty expressions, we then collapse the tree
         if fst_branch is None and snd_branch is None:
