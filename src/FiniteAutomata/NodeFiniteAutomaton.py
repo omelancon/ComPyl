@@ -285,7 +285,9 @@ class DFA:
         Build the DFA according to the given rules, save its starting node as self.start and initialize its
         current_state to the start
         """
-        nfa_start = self.build_nfa_from_rules(rules)
+        formated_rules = [(format_regexp(rule), token) for rule, token in rules]
+
+        nfa_start = self.build_nfa_from_rules(formated_rules)
 
         dfa_start = self.build_dfa_from_nfa(nfa_start)
 
@@ -377,8 +379,7 @@ class DFA:
         current_rule_priority = 1
 
         for rule, token in rules:
-            formated_rule = format_regexp(rule)
-            _, terminal_node = DFA.add_rule_to_nfa(nfa_start, formated_rule)
+            _, terminal_node = DFA.add_rule_to_nfa(nfa_start, rule)
             terminal_node.set_terminal_token(token, priority=current_rule_priority)
             current_rule_priority += 1
 
@@ -445,7 +446,15 @@ class DFA:
     @staticmethod
     def build_dfa_from_nfa(nfa):
         """
-        Generate the Deterministic Finite Automata corresponding to the given NFA
+        Generate the Deterministic Finite Automaton corresponding to the given NFA following these steps:
+        1) Recover all nodes from the NFA as well as the alphabet used by the language
+        2) Recover the epsilon star groups and merge them to generate the nodes of the DFA, this returns a table
+           representation fot he DFA
+        3) For each equivalence class (epsilon star group), recover the terminal node with maximum priority
+        4) Minimize the DFA with Hopcroft's algorithm
+        5) Optimize the lookouts by merging adjacent intervals
+        6) Translate the table to a graph structure
+        7) Return the starting node
         """
         # ========================================================
         # Recover all nodes and possible lookouts found in the NFA
