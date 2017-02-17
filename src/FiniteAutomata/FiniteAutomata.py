@@ -30,10 +30,7 @@ class FiniteAutomata(object):
     # I originally wanted to create an object for that, but it fails when pickling
     IGNORED = -1
 
-    # Maximum number of repetition of a same lookout handled, anything above is considered as infinite repetition
-    max_handled_repeat = 100
-
-    def __init__(self, terminal_token=None, max_handled_repeat=None):
+    def __init__(self, terminal_token=None):
         self.id = self._ids.next()
 
         # List of next states from current state.
@@ -42,10 +39,6 @@ class FiniteAutomata(object):
 
         # Terminal token is intended to be either a string or a function returning a string
         self.terminal_token = terminal_token
-
-        # Allows to by pass the default max_repeat_handled of the class
-        if max_handled_repeat:
-            self.max_handled_repeat = max_handled_repeat
 
     def __str__(self):
         return "<State '%d'>" % (self.id)
@@ -237,12 +230,12 @@ class LexerNFA(FiniteAutomata):
         else:
             return self, self
 
-    def build(self, rules, max_handled_repeat=100):
+    def build(self, rules):
 
         current_rule_priority = 1
 
         for rule, token in rules:
-            formated_rule = format_regexp(rule, max_handled_repeat=max_handled_repeat)
+            formated_rule = format_regexp(rule)
             _, terminal_node = self.add_rule(formated_rule)
             terminal_node.set_terminal_token(token, priority=current_rule_priority)
             current_rule_priority += 1
@@ -378,7 +371,7 @@ class LexerDFA(FiniteAutomata):
         """
         Copy the LexerDFA node, linking it to the next states without copying those
         """
-        dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token), max_handled_repeat=self.max_handled_repeat)
+        dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token))
         dup.next_states = {lookout: state for lookout, state in self.next_states}
 
         return dup
@@ -391,7 +384,7 @@ class LexerDFA(FiniteAutomata):
             return memo[id(self)]
 
         else:
-            dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token), max_handled_repeat=self.max_handled_repeat)
+            dup = LexerDFA(terminal_token=copy.deepcopy(self.terminal_token))
             dup.id = self.id
             memo[id(self)] = dup
             dup.next_states = [(lookout, state.__deepcopy__(memo)) for lookout, state in self.next_states]
@@ -1019,17 +1012,17 @@ class RegexpTree():
         return exp if self.next is None else (exp + self.next.print_regexp())
 
 
-def format_regexp(regexp, max_handled_repeat=100):
+def format_regexp(regexp):
     """
     Take a regexp as string and return the equivalent RegexpTree.
     Use sre_parse to first tokenize the regexp, then translate it.
     """
 
     parsed_regexp = sre_parse.parse(regexp)
-    return sre_to_regexp_tree(parsed_regexp.data, max_handled_repeat=max_handled_repeat)
+    return sre_to_regexp_tree(parsed_regexp.data)
 
 
-def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
+def sre_to_regexp_tree(sre_regexp):
     """
     Take a regexp as sre_parse tokens list and return the equivalent RegexpTree.
     """
@@ -1070,7 +1063,7 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
                               )
 
         elif token_type == 'in':
-            return make_regexp_intervals_union(current_token, regexp_tail, max_handled_repeat=max_handled_repeat)
+            return make_regexp_intervals_union(current_token, regexp_tail)
 
         elif token_type == 'max_repeat':
             token_repeated = current_token[1][2]
@@ -1084,13 +1077,10 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
             max = current_token[1][1]
 
             if min > 0:
-                new_max = max - min if max <= max_handled_repeat else max
+                new_max = max - min if max <= 1000 else max
                 extension = min * token_repeated + [('max_repeat', (0, new_max, token_repeated))] + regexp_tail
-                return sre_to_regexp_tree(
-                    extension,
-                    max_handled_repeat=max_handled_repeat
-                )
-            elif 1 <= max <= max_handled_repeat:
+                return sre_to_regexp_tree(extension)
+            elif 1 <= max <= 1000:
                 branch_token = ('branch',
                                 (None,
                                  ([('max_repeat', (0, max - 1, token_repeated))],
@@ -1098,24 +1088,21 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
                                                     ])
                                  )
                                 )
-                return sre_to_regexp_tree(
-                    [branch_token] + regexp_tail,
-                    max_handled_repeat=max_handled_repeat
-                )
+                return sre_to_regexp_tree([branch_token] + regexp_tail)
 
             elif max == 0:
-                return sre_to_regexp_tree(regexp_tail, max_handled_repeat=max_handled_repeat)
+                return sre_to_regexp_tree(regexp_tail)
 
             # Case where min = 0, max = inf, i.e. a Kleene operator
             else:
                 return RegexpTree(
                     'kleene',
-                    sre_to_regexp_tree(token_repeated, max_handled_repeat=max_handled_repeat),
+                    sre_to_regexp_tree(token_repeated),
                     sre_to_regexp_tree(regexp_tail))
 
         elif token_type == 'branch':
             union_elements = current_token[1][1]
-            return make_regexp_sre_union(union_elements, regexp_tail, max_handled_repeat=max_handled_repeat)
+            return make_regexp_sre_union(union_elements, regexp_tail)
 
         elif token_type == 'subpattern':
 
@@ -1141,7 +1128,7 @@ def sre_to_regexp_tree(sre_regexp, max_handled_repeat=100):
         raise
 
 
-def make_regexp_intervals_union(intervals, next, max_handled_repeat=100, already_in_intervals=False):
+def make_regexp_intervals_union(intervals, next, already_in_intervals=False):
     """
     Given a list of sre 'in', 'range and 'literal' tokens, return a union of those as RegexpTree
     """
@@ -1157,20 +1144,19 @@ def make_regexp_intervals_union(intervals, next, max_handled_repeat=100, already
     elif list_length == 1:
         min = intervals[0][0]
         max = intervals[0][1]
-        return RegexpTree('single', min, max, sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat))
+        return RegexpTree('single', min, max, sre_to_regexp_tree(next))
 
     else:
         fst = intervals[0]
         return RegexpTree(
             'union',
             RegexpTree('single', fst[0], fst[1], None),
-            make_regexp_intervals_union(intervals[1:], [], max_handled_repeat=max_handled_repeat,
-                                        already_in_intervals=True),
-            sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
+            make_regexp_intervals_union(intervals[1:], [], already_in_intervals=True),
+            sre_to_regexp_tree(next)
         )
 
 
-def make_regexp_sre_union(regexp_union, next, max_handled_repeat=100):
+def make_regexp_sre_union(regexp_union, next):
     """
     Given a list of sre parsed regexp, return a union of those as a RegexpTree.
     """
@@ -1180,14 +1166,14 @@ def make_regexp_sre_union(regexp_union, next, max_handled_repeat=100):
         return None
 
     elif list_length == 1:
-        regexp_tree = sre_to_regexp_tree(regexp_union[0], max_handled_repeat=max_handled_repeat)
+        regexp_tree = sre_to_regexp_tree(regexp_union[0])
         return regexp_tree
 
     else:
         fst_exp = regexp_union[0]
-        fst_branch = sre_to_regexp_tree(fst_exp, max_handled_repeat=max_handled_repeat)
-        snd_branch = make_regexp_sre_union(regexp_union[1:], [], max_handled_repeat=max_handled_repeat)
-        next_branch = sre_to_regexp_tree(next, max_handled_repeat=max_handled_repeat)
+        fst_branch = sre_to_regexp_tree(fst_exp)
+        snd_branch = make_regexp_sre_union(regexp_union[1:], [])
+        next_branch = sre_to_regexp_tree(next)
 
         # It happens that both branches were empty expressions, we then collapse the tree
         if fst_branch is None and snd_branch is None:
