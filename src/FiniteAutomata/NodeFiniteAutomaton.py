@@ -1,6 +1,7 @@
 import sre_parse
 import copy
 from itertools import count
+import re
 
 
 class FiniteAutomatonError(Exception):
@@ -965,6 +966,10 @@ class RegexpTreeException(Exception):
     pass
 
 
+class RegexpParsingException(Exception):
+    pass
+
+
 class RegexpTree():
     """
     A tree structure of a regexp.
@@ -988,14 +993,101 @@ class RegexpTree():
         elif node_type == "union":
             self.fst = values[0]
             self.snd = values[1]
-            self.next = values[2]
+            self.next = values[2] if len(values) > 2 else None
 
         elif node_type == 'kleene':
             self.pattern = values[0]
-            self.next = values[1]
+            self.next = values[1] if len(values) > 1 else None
 
     def __str__(self):
         return "<RegexpTree '%s'>" % self.type
+
+    def __copy__(self):
+        if self.type == 'single':
+            dup = RegexpTree(
+                'single',
+                self.min_ascii,
+                self.max_ascii,
+                self.next
+            )
+
+        elif self.type == 'union':
+            dup = RegexpTree(
+                'union',
+                self.fst,
+                self.snd,
+                self.next
+            )
+
+        elif self.type == 'kleene':
+            dup = RegexpTree(
+                'kleene',
+                self.pattern,
+                self.next
+            )
+
+        return dup
+
+    def __deepcopy__(self, memo):
+        if id(self) in memo:
+            raise RegexpTreeException("found loop in RegexpTree while deepcopying")
+        else:
+            memo[id(self)] = self
+
+        if self.type == 'single':
+            dup = RegexpTree(
+                'single',
+                self.min_ascii,
+                self.max_ascii,
+                self.next.__deepcopy__({}) if self.next else None
+            )
+
+        elif self.type == 'union':
+            dup = RegexpTree(
+                'union',
+                self.fst.__deepcopy__({}),
+                self.snd.__deepcopy__({}),
+                self.next.__deepcopy__({}) if self.next else None
+            )
+
+        elif self.type == 'kleene':
+            dup = RegexpTree(
+                'kleene',
+                self.pattern.__deepcopy__({}),
+                self.next.__deepcopy__({}) if self.next else None
+            )
+
+        return dup
+
+    def extend(self, next):
+        """
+        Add the given RegexpTree at the end of the chain of RegexpTrees starting at self
+        """
+        if self.next is None:
+            self.next = next
+        else:
+            self.next.extend(next)
+
+    def pop(self):
+        """
+        Remove the last RegexTree instruction at the end of the chain starting at self
+        """
+        if self.next is None:
+            return None
+
+        elif self.next.next is None:
+            pop = self.next
+            self.next = None
+            return pop
+
+        else:
+            return self.next.pop()
+
+    def truncate(self):
+        """
+        Delete the upcoming part of the RegexpTree chain
+        """
+        self.next = None
 
     def print_regexp(self):
         """
@@ -1018,235 +1110,332 @@ class RegexpTree():
         elif self.type == 'kleene':
             exp = "(%s)*" % self.pattern.print_regexp()
 
+        else:
+            raise RegexpTreeException("node is of unexpected type")
+
         return exp if self.next is None else (exp + self.next.print_regexp())
 
 
 def format_regexp(regexp):
+    nodes_list = regexp_to_regexp_tree_list(regexp)
+
+    regexp_tree = nodes_list.pop(0) if nodes_list else None
+    last = regexp_tree
+
+    while nodes_list:
+        last.extend(nodes_list.pop(0))
+        last = last.next
+
+    return regexp_tree
+
+
+def regexp_to_regexp_tree_list(regexp,  pos=0):
     """
-    Take a regexp as string and return the equivalent RegexpTree.
-    Use sre_parse to first tokenize the regexp, then translate it.
+    Parse a regular expression and return it as a RegexpTree object
     """
+    nodes_list = []
+    regexp_length = len(regexp)
 
-    parsed_regexp = sre_parse.parse(regexp)
-    return sre_to_regexp_tree(parsed_regexp.data)
+    while pos < regexp_length:
+        new_nodes, new_pos = get_next_regexp_tree_token(regexp, pos=pos, nodes_list=nodes_list)
+        pos = new_pos
+        nodes_list += new_nodes
+
+    return nodes_list
 
 
-def sre_to_regexp_tree(sre_regexp):
+def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
     """
-    Take a regexp as sre_parse tokens list and return the equivalent RegexpTree.
+    Get the next regexp element(s) and return them as well as the new position in the string.
+    Note: This return the next token based on a single lookahead. By example "a*c" will only see a, two call will be
+          needed to see a*, thus it is needed to pass a nodes_list to be able to mutate the last element if, by example,
+          "*" or "+" are seen
+    Note2: When encountering |, the method parses the rest of the regexp since it needs the following tokens to form the
+           union
+    :param regexp: The regexp as string
+    :param pos: the position where to start
+    :param nodes_list: Previous tokens processed in the regexp, if a look-behind is necessary, the last element will be
+                       poped out, mutating the nodes_list and using the poped node to build a new node.
+    :return: The list of new RegexpTree nodes and the next position
     """
+    # Will store the node if a single node is to be returned
+    node = None
 
-    # Token 'branch' has SubPatterns as sub-tokens, we convert back to list for uniformity
-    if isinstance(sre_regexp, sre_parse.SubPattern):
-        sre_regexp = sre_regexp.data
+    if regexp[pos] == "\\":
+        char = ord(regexp[pos + 1])
+        node = RegexpTree('single', char, char)
+        pos += 2
+        nodes = [node]
 
-    sre_length = len(sre_regexp)
+    elif regexp[pos] == "[":
+        end_pos = find_next_non_escaped_char("]", regexp, beg=pos + 1)
 
-    if sre_length == 0:
-        return None
+        if end_pos:
+            node = get_regexptree_union_from_set(regexp[pos + 1:end_pos])
+            pos += end_pos - pos + 1
+        else:
+            raise RegexpParsingException("bad set syntax, expected ]")
 
-    else:
+        nodes = [node]
 
-        current_token = sre_regexp[0]
+    elif regexp[pos] == "(":
+        end_pos = find_matching_closing_parenthesis(regexp, beg=pos + 1)
+        sub_regexp = regexp[pos + 1:end_pos]
 
-        # When sre_parse returned a SubPattern, extract the data
-        if isinstance(current_token, sre_parse.SubPattern):
-            current_token = current_token.data
+        node = format_regexp(sub_regexp)
+        pos += end_pos - pos + 1
+        nodes = [node]
 
-        regexp_tail = sre_regexp[1:]
-        token_type = current_token[0]
+    elif regexp[pos] == "*":
+        node = RegexpTree(
+            'kleene',
+            nodes_list.pop()
+        )
+        pos += 1
+        nodes = [node]
 
-        if token_type == 'literal':
-            return RegexpTree('single',
-                              current_token[1],
-                              current_token[1],
-                              sre_to_regexp_tree(regexp_tail)
-                              )
+    elif regexp[pos] == "+":
+        node = RegexpTree('kleene', copy.deepcopy(nodes_list[-1]))
+        pos += 1
+        nodes = [node]
 
-        # I don't think this is ever attained
-        elif token_type == 'range':
-            return RegexpTree('single',
-                              current_token[1][0],
-                              current_token[1][1],
-                              sre_to_regexp_tree(regexp_tail)
-                              )
+    elif regexp[pos] == "{":
+        end_pos = regexp.find("}", beg=pos+1)
+        min_max = regexp[pos + 1: end_pos].split(',')
+        length = len(min_max)
 
-        elif token_type == 'in':
-            return make_regexp_intervals_union(current_token, regexp_tail)
+        if length == 1:
+            min = max = int(min_max[0])
 
-        elif token_type == 'max_repeat':
-            token_repeated = current_token[1][2]
+        elif length == 2:
+            min = int(min_max[0])
+            max = int(min_max[1])
 
-            # In the case of 'max_repeat' tokens, sre_parse always returns current_token[1][2] as SubPattern, but
-            # we don't always do so, thus we need to normalize here
-            if isinstance(token_repeated, sre_parse.SubPattern):
-                token_repeated = token_repeated.data
+        else:
+            raise RegexpParsingException("bad syntax for min-max repetition")
 
-            min = current_token[1][0]
-            max = current_token[1][1]
+        if 0 <= min <= max and max > 0:
+            try:
+                node_to_repeat = nodes_list.pop()
+            except IndexError:
+                raise RegexpParsingException("bad syntax, repetition without token")
 
-            if min > 0:
-                new_max = max - min if max <= 1000 else max
-                extension = min * token_repeated + [('max_repeat', (0, new_max, token_repeated))] + regexp_tail
-                return sre_to_regexp_tree(extension)
-            elif 1 <= max <= 1000:
-                branch_token = ('branch',
-                                (None,
-                                 ([('max_repeat', (0, max - 1, token_repeated))],
-                                  token_repeated + [('max_repeat', (0, max - 1, token_repeated))
-                                                    ])
-                                 )
-                                )
-                return sre_to_regexp_tree([branch_token] + regexp_tail)
+            node = repeat_regexptree(node_to_repeat, min, max)
+            pos += end_pos - pos + 1
 
-            elif max == 0:
-                return sre_to_regexp_tree(regexp_tail)
+        else:
+            RegexpParsingException("bad interval for min-max repetition")
 
-            # Case where min = 0, max = inf, i.e. a Kleene operator
-            else:
-                return RegexpTree(
-                    'kleene',
-                    sre_to_regexp_tree(token_repeated),
-                    sre_to_regexp_tree(regexp_tail))
+        nodes = [node]
 
-        elif token_type == 'branch':
-            union_elements = current_token[1][1]
-            return make_regexp_sre_union(union_elements, regexp_tail)
+    elif regexp[pos] == "|":
+        pos += 1
 
-        elif token_type == 'subpattern':
+        # Since we need the next token to create the union RegexpTree, we parse the rest of the regexp and later we
+        # form the union and return the whole list
+        next_nodes = regexp_to_regexp_tree_list(regexp, pos=pos)
 
-            if isinstance(current_token[1][1], sre_parse.SubPattern):
-                sub_regexp = current_token[1][1].data
-            else:
-                sub_regexp = current_token[1][1]
+        try:
+            union_fst = nodes_list.pop()
+            union_snd = next_nodes.pop(0)
+        except IndexError:
+            raise RegexpParsingException("bad syntax, unexpected |")
 
-            subpattern = sre_to_regexp_tree(sub_regexp + regexp_tail)
-            return subpattern
+        # We just parsed the whole regexp, thus we are done
+        pos = len(regexp)
 
-        # Corresponds to '.', that is anything but a linebreak (\n only)
-        elif token_type == 'any':
-            return RegexpTree('union',
-                              RegexpTree('single', 0, 9),
-                              RegexpTree('single', 11, 255),
-                              sre_to_regexp_tree(regexp_tail)
-                              )
-
-        elif token_type == 'at':
-            raise NotImplemented
-
-        raise
-
-
-def make_regexp_intervals_union(intervals, next, already_in_intervals=False):
-    """
-    Given a list of sre 'in', 'range and 'literal' tokens, return a union of those as RegexpTree
-    """
-    if not already_in_intervals:
-        intervals = sre_list_to_interval(intervals)
-
-    list_length = len(intervals)
-
-    if list_length == 0:
-        return None
-
-    # Will return a 'single' if we gave a single interval
-    elif list_length == 1:
-        min = intervals[0][0]
-        max = intervals[0][1]
-        return RegexpTree('single', min, max, sre_to_regexp_tree(next))
-
-    else:
-        fst = intervals[0]
-        return RegexpTree(
+        node = RegexpTree(
             'union',
-            RegexpTree('single', fst[0], fst[1], None),
-            make_regexp_intervals_union(intervals[1:], [], already_in_intervals=True),
-            sre_to_regexp_tree(next)
+            union_fst,
+            union_snd,
         )
 
+        nodes = [node] + next_nodes
 
-def make_regexp_sre_union(regexp_union, next):
-    """
-    Given a list of sre parsed regexp, return a union of those as a RegexpTree.
-    """
-    list_length = len(regexp_union)
+    elif regexp[pos] == ".":
+        node = RegexpTree(
+            'union',
+            RegexpTree('single', 0, 9),
+            RegexpTree('single', 11, 255)
+        )
+        pos += 1
+        nodes = [node]
 
-    if list_length == 0:
-        return None
-
-    elif list_length == 1:
-        regexp_tree = sre_to_regexp_tree(regexp_union[0])
-        return regexp_tree
+    elif regexp[pos] == "_":
+        node = RegexpTree('single', 0, 255)
+        pos += 1
+        nodes = [node]
 
     else:
-        fst_exp = regexp_union[0]
-        fst_branch = sre_to_regexp_tree(fst_exp)
-        snd_branch = make_regexp_sre_union(regexp_union[1:], [])
-        next_branch = sre_to_regexp_tree(next)
+        char = ord(regexp[pos])
+        node = RegexpTree('single', char, char)
+        pos += 1
+        nodes = [node]
 
-        # It happens that both branches were empty expressions, we then collapse the tree
-        if fst_branch is None and snd_branch is None:
-            return next_branch
+    return nodes, pos
+
+
+def get_regexptree_union_from_set(inner_set):
+    """
+    Given the inner part of a set ([...]) in a regexp, return the corresponding RegexpTree object
+    """
+    if inner_set:
+        length = len(inner_set)
+        pos = 0
+        intervals = []
+
+        while pos < length:
+            if inner_set[pos] == "\\":
+                ascii = ord(inner_set[pos + 1])
+                intervals.append((ascii, ascii))
+                pos += 2
+
+            elif inner_set[pos] == "-":
+                try:
+                    previous = intervals.pop()
+                except IndexError:
+                    raise RegexpParsingException("bad syntax for range in set, unexpected -")
+
+                if previous[0] == previous[1]:
+                    min = previous[0]
+                else:
+                    raise RegexpParsingException("bad syntax for range in set, unexpected -")
+
+                if inner_set[pos + 1] == "\\":
+                    max = ord(inner_set[pos + 2])
+                    pos += 3
+
+                else:
+                    max = ord(inner_set[pos + 1])
+                    pos += 2
+
+                intervals.append((min, max))
+
+            else:
+                ascii = ord(inner_set[pos])
+                intervals.append((ascii, ascii))
+                pos += 1
+
+        return reduce_interval_list_to_regexp_tree_union(intervals)
+
+    else:
+        raise RegexpParsingException("bad set, set cannot be empty")
+
+
+def find_matching_closing_parenthesis(string, beg=0):
+    """
+    Find the closing parenthesis starting at 'beg' in a string and return its position. Return None if there is none.
+    The character at position 'beg' does not have to be the opening parenthesis.
+    """
+    depth = 0
+    pos = beg
+
+    while True:
+        try:
+            char = string[pos]
+        except IndexError:
+            return None
+
+        if char == "(":
+            depth += 1
+            pos += 1
+
+        elif char == ")":
+            if depth == 0:
+                return pos
+
+            else:
+                pos += 1
+                depth -= 1
+
         else:
-            return RegexpTree('union', fst_branch, snd_branch, next_branch)
+            pos += 1
 
 
-def sre_list_to_interval(regexp_list):
+def find_next_non_escaped_char(char, string, beg=0):
     """
-    Given a list of int, sre 'literal', sre 'in' or sre 'range' return a list of corresponding intervals of ascii
-    values.
+    Find the next non escaped (not preceded with \) of the given char (string even though intended to be a single char)
+    and return its position. Return None if no match
     """
-    return set_to_intervals(sre_list_to_set(regexp_list))
+    non_escaped_pattern = re.compile(r"(?<!\\)" + char)
+    match = non_escaped_pattern.search(string, beg)
+
+    if match:
+        return match.start()
+    else:
+        return None
 
 
-def sre_list_to_set(regexp_list):
+def repeat_regexptree(node, min, max):
     """
-    Given a list of int, (min, max), sre 'literal', sre 'in' or sre 'range' return a set of corresponding ascii values.
+    Given a pattern as a RegexpTree (node), return a RegexpTree representing the pattern repeated from min to max times
     """
+    if min > 0:
+        first = copy.deepcopy(node)
+        last = first
+        min -= 1
+        max -= 1
 
-    if not isinstance(regexp_list, list):
-        regexp_list = [regexp_list]
+    else:
+        last = copy.deepcopy(node)
+        first = RegexpTree(
+            'union',
+            None,
+            last
+        )
+        max -= 1
 
-    alphabet = set()
+    while min > 0:
+        extension = copy.deepcopy(node)
+        last.extend(extension)
+        last = extension
+        min - 1
+        max -= 1
 
-    for token in regexp_list:
+    while max > 0:
+        extension_snd = copy.deepcopy(node)
+        extension = RegexpTree(
+            'union',
+            None,
+            extension_snd
+        )
+        last.extend(extension)
+        last = extension_snd
 
-        if isinstance(token, int):
-            alphabet.add(token)
+        max -= 1
 
-        elif isinstance(token[0], int) and isinstance(token[1], int):
-            alphabet.add(set(range(token[0], token[1] + 1)))
-
-        else:
-            type = token[0]
-
-            if type == "literal":
-                value = token[1]
-                alphabet.add(value)
-
-            elif type == "in":
-                alphabet |= sre_list_to_set(token[1])
-
-            elif type == "range":
-                value = token[1]
-                alphabet |= set(range(value[0], value[1] + 1))
-
-    return alphabet
+    return first
 
 
-def format_char_to_sre(char):
-    return 'literal', ord(char)
+def reduce_interval_list_to_regexp_tree_union(intervals, next=None):
+    """
+    Given a list of intervals of ascii values, return the RegexpTree corresponding to the union of all those intervals
+    """
+    length = len(intervals)
+
+    if length == 0:
+        return None
+
+    if length == 1:
+        return RegexpTree(
+            'single',
+            intervals[0][0],
+            intervals[0][1],
+            next
+        )
+
+    else:
+        return RegexpTree(
+            'union',
+            RegexpTree(
+                'single',
+                intervals[0][0],
+                intervals[0][1]
+            ),
+            reduce_interval_list_to_regexp_tree_union(intervals[1:]),
+            next
+        )
 
 
 def format_char_to_ascii(char):
     return ord(char)
-
-
-def parse_regexp(regexp):
-    """
-    Tokenize the regexp (string) using Python sre_parse module.
-    This returns a SubPattern object, we will mostly be intersted in the data field
-    of the returned object.
-    """
-    pattern = sre_parse.parse(regexp, 0)
-    return pattern
