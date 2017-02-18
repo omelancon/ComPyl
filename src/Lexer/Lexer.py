@@ -2,7 +2,7 @@ import re
 import copy
 import dill
 
-from ..FiniteAutomata.DFA import DFA, NodeIsNotTerminalState
+from ..FiniteAutomata.FiniteAutomatons import DFA, NodeIsNotTerminalState
 
 
 class LexerError(Exception):
