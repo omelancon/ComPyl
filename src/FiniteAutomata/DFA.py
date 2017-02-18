@@ -1,4 +1,3 @@
-import sre_parse
 import copy
 from itertools import count
 import re
@@ -1435,7 +1434,3 @@ def reduce_interval_list_to_regexp_tree_union(intervals, next=None):
             reduce_interval_list_to_regexp_tree_union(intervals[1:]),
             next
         )
-
-
-def format_char_to_ascii(char):
-    return ord(char)
