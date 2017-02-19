@@ -726,7 +726,7 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
 def recover_nodes_and_lookouts_from_nfa(nfa):
     """
     Given a Non-Deterministic Finite Automata, return a dict of all nodes keyed by id and a list of all lookouts value
-     found in the NFA.
+    found in the NFA.
     """
     edges_lookouts = []
     nodes_as_dict = {}
@@ -969,7 +969,7 @@ class RegexpParsingException(Exception):
     pass
 
 
-class RegexpTree():
+class RegexpTree:
     """
     A tree structure of a regexp.
     Reduce a regexp to basic regexp tokens, that is characters, unions (or) and kleene operator (*)
@@ -1116,6 +1116,9 @@ class RegexpTree():
 
 
 def format_regexp(regexp):
+    """
+    Parse a regular expression and return it as a RegexpTree object
+    """
     nodes_list = regexp_to_regexp_tree_list(regexp)
 
     regexp_tree = nodes_list.pop(0) if nodes_list else None
@@ -1130,7 +1133,7 @@ def format_regexp(regexp):
 
 def regexp_to_regexp_tree_list(regexp,  pos=0):
     """
-    Parse a regular expression and return it as a RegexpTree object
+    Parse a regular expression and return it as a list of RegexpTree objects
     """
     nodes_list = []
     regexp_length = len(regexp)
