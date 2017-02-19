@@ -1210,7 +1210,7 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
         nodes = [first_occurence]
 
     elif regexp[pos] == "{":
-        end_pos = regexp.find("}", beg=pos+1)
+        end_pos = regexp.find("}", pos+1)
         min_max = regexp[pos + 1: end_pos].split(',')
         length = len(min_max)
 
@@ -1399,7 +1399,7 @@ def repeat_regexptree(node, min, max):
         extension = copy.deepcopy(node)
         last.extend(extension)
         last = extension
-        min - 1
+        min -= 1
         max -= 1
 
     while max > 0:
