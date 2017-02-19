@@ -374,8 +374,6 @@ class DFA:
         """
         Parse and add the rules one by one to an empty NFA, see add_rule_to_nfa for the rule-adding algorithm.
         """
-        id_counter = count(0)
-
         nfa_start = NodeNFA()
 
         # The rule priority has to be written in the NFA, later when the nodes are merged to form a DFA, it resolved
@@ -1205,9 +1203,11 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
         nodes = [node]
 
     elif regexp[pos] == "+":
-        node = RegexpTree('kleene', copy.deepcopy(nodes_list[-1]))
+        first_occurence = nodes_list.pop()
+        kleene_component = RegexpTree('kleene', copy.deepcopy(first_occurence))
+        first_occurence.extend(kleene_component)
         pos += 1
-        nodes = [node]
+        nodes = [first_occurence]
 
     elif regexp[pos] == "{":
         end_pos = regexp.find("}", beg=pos+1)

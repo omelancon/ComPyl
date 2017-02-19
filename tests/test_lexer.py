@@ -31,15 +31,15 @@ rules = [
     ("[e-z]!", "EZ"),
     ("(AB*)+|Z+",  "COMPLEX")
 ]
-buffer = "xabaaabAZxbabadcjkjke!j!t!xABBBAABABBB"
+buffer = "e!ABBBBABBABAABABZxabaaabAZxbabadcjkjke!j!t!xABBBAABABBB"
 
-lexer = Lexer(rules=rules)
+lexer = Lexer(rules=rules2)
 lexer.set_line_rule("\n")
 lexer.build()
 
 visual_lexer.plot_dfa(lexer.dfa.start)
 
-lexer.read(buffer)
+lexer.read(buffer2)
 
 new = copy.deepcopy(lexer)
 
