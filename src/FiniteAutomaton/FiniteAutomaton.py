@@ -799,9 +799,23 @@ def interval_cmp(x, y):
         return 0
 
 
+def value_interval_cmp(value, interval):
+    """
+    Comparator that indicates if a value is within, higher or lower than an interval
+    """
+
+    if interval[0] <= value <= interval[1]:
+        return 0
+    elif value < interval[0]:
+        return -1
+    else:
+        return 1
+
+
 def binary_search_on_transitions(target, transitions):
     """
-    Binary search for intervals in a sorted list using interval_cmp for comparisons
+    Binary search for a transition in a sorted list of (interval, transition).
+    Return the found transition, None if not found
     """
     left = 0
     right = len(transitions) - 1
@@ -818,6 +832,31 @@ def binary_search_on_transitions(target, transitions):
             return transitions[index]
 
     return None
+
+
+def binary_search_value_in_intervals(target, intervals, return_closest=False):
+    """
+    Binary search for a value in a sorted list of intervals.
+    Return the position of the found interval, None if not found
+    If return_closest is set to True, the index will be returned even if the target was found in no interval, this is
+    needed if we want to use binary search to find a super-interval's boundaries.
+    """
+    left = 0
+    right = len(intervals) - 1
+    index = None
+
+    while left <= right:
+        index = (left + right) / 2
+        min, max = intervals[index]
+
+        if target < min:
+            right = index - 1
+        elif target > max:
+            left = index + 1
+        else:
+            return index
+
+    return index if return_closest else None
 
 
 def value_is_in_range(value, range):
@@ -947,6 +986,75 @@ def get_minimal_covering_intervals(intervals):
         return [(left, right)] + rec(truncated_intervals)
 
     return rec(intervals)
+
+
+def inverse_intervals_list(intervals):
+    """
+    Given a list of intervals, return the inverse of the union of the intervals
+    """
+
+    inverse = [(0, 255)]
+
+    for interval in intervals:
+        min, max = interval
+
+        if min > max:
+            raise ValueError("the lower bound of an interval must be leq than the upper bound")
+
+        min_pos = binary_search_value_in_intervals(min, inverse, return_closest=True)
+
+        # min_is_inside indicates if the min is contained in an interval
+        # 0  => the min is contained in the interval at min_pos
+        # 1  => the min is above the interval at min_pos
+        # -1 => the min is below the interval at min_pos
+        min_is_inside = value_interval_cmp(min, inverse[min_pos])
+
+        max_pos = binary_search_value_in_intervals(max, inverse, return_closest=True)
+
+        # Idem as min_is_inside, but for the max
+        max_is_inside = value_interval_cmp(max, inverse[max_pos])
+
+        # Case where we truncate the interval
+        if min_is_inside == 0:
+            matching_interval = inverse[min_pos]
+
+            left = inverse[:min_pos]
+
+            # Append the truncated interval if there is something remaining
+            if matching_interval[0] < min:
+                left.append((matching_interval[0], min - 1))
+
+        # min is below min_pos, thus keep everything below min_pos, min_pos excluded
+        elif min_is_inside == -1:
+            left = inverse[:min_pos]
+
+        # min is above min_pos, thus keep everything below min_pos, min_pos included
+        elif min_is_inside == 1:
+            try:
+                _ = inverse[min_pos + 1]
+            except IndexError:
+                # Case where the min is above, and there is nothing above, thus inverse is not mutated
+                continue
+            left = inverse[:min_pos + 1]
+
+        # Same logic as above but for the maximum
+        if max_is_inside == 0:
+            matching_interval = inverse[max_pos]
+
+            right = inverse[max_pos + 1:]
+
+            if matching_interval[1] > max:
+                right.insert(0, (max + 1, matching_interval[1]))
+
+        elif max_is_inside == -1:
+            right = inverse[max_pos:]
+
+        elif min_is_inside == 1:
+            right = inverse[max_pos + 1:]
+
+        inverse = left + right
+
+    return inverse
 
 
 # ======================================================================================================================
@@ -1209,6 +1317,17 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
         pos += 1
         nodes = [first_occurence]
 
+    elif regexp[pos] == "?":
+        try:
+            node_to_repeat = nodes_list.pop()
+        except IndexError:
+            raise RegexpParsingException("bad syntax, '?' without token")
+
+        node = repeat_regexptree(node_to_repeat, 0, 1)
+        pos += 1
+
+        nodes = [node]
+
     elif regexp[pos] == "{":
         end_pos = regexp.find("}", pos+1)
         min_max = regexp[pos + 1: end_pos].split(',')
@@ -1293,6 +1412,11 @@ def get_regexptree_union_from_set(inner_set):
         length = len(inner_set)
         pos = 0
         intervals = []
+        invert_set = False
+
+        if inner_set[pos] == "^":
+            invert_set = True
+            pos += 1
 
         while pos < length:
             if inner_set[pos] == "\\":
@@ -1319,12 +1443,21 @@ def get_regexptree_union_from_set(inner_set):
                     max = ord(inner_set[pos + 1])
                     pos += 2
 
-                intervals.append((min, max))
+                if min <= max:
+                    intervals.append((min, max))
+                else:
+                    raise RegexpParsingException("bad syntax for range x-y, x ascii exceeds y ascii")
 
             else:
                 ascii = ord(inner_set[pos])
                 intervals.append((ascii, ascii))
                 pos += 1
+
+        # Sort then merge overlapping intervals
+        intervals = merge_intervals(intervals)
+
+        if invert_set:
+            intervals = inverse_intervals_list(intervals)
 
         return reduce_interval_list_to_regexp_tree_union(intervals)
 

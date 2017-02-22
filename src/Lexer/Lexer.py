@@ -104,8 +104,8 @@ class Lexer:
         # A special way to implement the line rule
         self.line_rule = None
 
-        # The Deterministic Finite Automaton that will be later build to tokenize the buffer
-        self.dfa = None
+        # The Non-deterministic Finite Automaton that can later be optionally be saved
+        self.nfa = None
 
         # A dict of params that is accessible to rules as functions
         self.params = params if params else {}

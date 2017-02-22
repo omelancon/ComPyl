@@ -2,16 +2,14 @@ from src.Lexer.Lexer import Lexer
 from src.Visual import visual_lexer
 import copy
 
-number = r"[1-9][0-9]*"
-decimal = number + r"\.[0-9]+"
-
 rules = [
-    ("1{3}|(X3{1,2}1)", "THREE_ONE_OR_IS_IT"),
-    ("X2{0,4}", "XWITHTWOS"),
-    ("X3{1,2}", "XWITHTHREES")
+    ("[a-z]+", "WORD"),
+    ("[A-Z][a-z]*", "NAME"),
+    ("certificat en intervention psychosociale", "DOMAINE_DE_PAM"),
+    (" ", None)
 ]
 
-buffer = "111XX22X31X33"
+buffer = "bonjour Pam comment vas tu et tu fais un certificat en intervention psychosociale"
 
 lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
