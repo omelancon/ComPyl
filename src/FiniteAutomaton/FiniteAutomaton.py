@@ -1453,7 +1453,7 @@ def get_regexptree_union_from_set(inner_set):
                 intervals.append((ascii, ascii))
                 pos += 1
 
-        # Sort then merge overlapping intervals
+        # Sort and merge overlapping intervals
         intervals = merge_intervals(intervals)
 
         if invert_set:

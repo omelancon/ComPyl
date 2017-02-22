@@ -20,13 +20,10 @@ class Token:
         self.lineno = lineno
 
     def __str__(self):
-        return "<Token %s> line %s" % (self.type, str(self.lineno))
+        return "<Token %s line %s>" % (self.type, str(self.lineno))
 
     def __eq__(self, other):
-        if isinstance(other, str):
-            return self.type == other
-
-        elif isinstance(other, Token):
+        if isinstance(other, Token):
             return self.type == other.type
 
         else:
