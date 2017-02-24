@@ -25,7 +25,7 @@ class NodeFiniteAutomaton(object):
     # Special terminal values reserved for a terminal state that is ignored (no returned token)
     IGNORED = -1
 
-    def __init__(self, terminal_token=None, counter=None):
+    def __init__(self, terminal_token=None, special_actions=None, counter=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
@@ -36,8 +36,12 @@ class NodeFiniteAutomaton(object):
         # Terminal token is intended to be either a string or a function returning a string
         self.terminal_token = terminal_token
 
+        # Special action is a function returning None, but acting on the state of the lexer
+        # It is returned to be called by the lexer when the DFA encounters a pattern contained into a main pattern
+        self.special_actions = special_actions if special_actions else []
+
     def __str__(self):
-        return "<State '%d'>" % (self.id)
+        return "<State '%d'>" % self.id
 
     def add_transition_range(self, min_ascii, max_ascii, *args, **kwargs):
         """
@@ -126,13 +130,46 @@ class NodeFiniteAutomaton(object):
         else:
             raise NodeIsNotTerminalState
 
+    def add_special_action(self, action_type, action):
+        """
+        Add the given action to the special actions list
+        """
+        self.special_actions.append((action_type, action))
+
+    def get_special_actions(self):
+        """
+        Return the list of special actions of the node
+        """
+        return self.special_actions
+
+    def set_special_actions(self, actions):
+        """
+        Replace the current special actions of the node by the new list of special actions
+        """
+        self.special_actions = []
+
+        for action in actions:
+            self.add_special_action(*action)
+
+    def has_special_action(self):
+        """
+        Returns True if the state has special actions, False otherwise
+        """
+        return bool(self.special_actions)
+
 
 class NodeNFA(NodeFiniteAutomaton):
     def __init__(self, *args, **kwargs):
         super(NodeNFA, self).__init__(*args, **kwargs)
 
+        # Priority of the terminal token of the current node, allowing to choose the right rule when merging NFA nodes
         self.terminal_priority = kwargs['terminal_priority'] if 'terminal_priority' in kwargs else None
+
+        # An epsilon star group is the set of all nodes connected to the current node by one or more empty transition
         self.epsilon_star_group = None
+
+        # Any state with is_real_state set to False cannot lead to the creation of a DFA node by itself
+        self.is_real_state = kwargs['is_real_state'] if 'is_real_state' in kwargs else True
 
     def set_terminal_token(self, terminal_token, priority=None):
         """
@@ -143,6 +180,12 @@ class NodeNFA(NodeFiniteAutomaton):
 
         if not self.terminal_exists():
             self.terminal_priority = priority
+
+    def make_real_state(self):
+        self.is_real_state = True
+
+    def make_fake_state(self):
+        self.is_real_state = False
 
     def get_transition_states_for_lookout(self, lookout):
         """
@@ -192,7 +235,7 @@ class NodeNFA(NodeFiniteAutomaton):
     def _calculate_epsilon_star_group(self, _group=None, force_recalculate=False):
         """
         Add all nodes linked by 0 or more epsilon (empty) transition from self, including self, to _group.
-        Store the new _group is self.epsilon_star_group if we are at top level (_group is None)
+        Store the new _group in self.epsilon_star_group if we are at top level (_group is None)
         Then return the _group as set
         """
         # We will write the group to self only if save is True, that is for the node that called the initial calculation
@@ -203,12 +246,13 @@ class NodeNFA(NodeFiniteAutomaton):
             save = True
 
         for node in self.get_transition_for_empty_string():
-            if force_recalculate or node.epsilon_star_group is None:
-                node_group = node._calculate_epsilon_star_group(_group=_group, force_recalculate=force_recalculate)
-            else:
-                node_group = node.epsilon_star_group
+            if node is not self:
+                if force_recalculate or node.epsilon_star_group is None:
+                    node_group = node._calculate_epsilon_star_group(_group=_group, force_recalculate=force_recalculate)
+                else:
+                    node_group = node.epsilon_star_group
 
-            _group |= node_group
+                _group |= node_group
 
         _group.add(self)
         if save:
@@ -224,6 +268,7 @@ class NodeDFA(NodeFiniteAutomaton):
         """
         dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
         dup.id = self.id
+        dup.special_actions = copy.copy(self.special_actions)
         dup.next_states = {lookout: state for lookout, state in self.next_states}
 
         return dup
@@ -239,6 +284,7 @@ class NodeDFA(NodeFiniteAutomaton):
             dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
             dup.id = self.id
             memo[id(self)] = dup
+            dup.special_actions = copy.copy(self.special_actions)
             dup.next_states = [(lookout, state.__deepcopy__(memo)) for lookout, state in self.next_states]
 
             return dup
@@ -289,7 +335,27 @@ class DFA:
         Build the DFA according to the given rules, save its starting node as self.start and initialize its
         current_state to the start
         """
-        formated_rules = [(format_regexp(rule), token) for rule, token in rules]
+        formated_rules = []
+
+        for packed_rule in rules:
+            rule = format_regexp(packed_rule[0])
+            token = packed_rule[1]
+            try:
+                if packed_rule[2] == "trigger_on_contain":
+                    if not callable(token):
+                        raise FiniteAutomatonError("token of special action trigger_on_contain must be a function")
+
+                    special_action = "trigger_on_contain"
+
+                else:
+                    raise FiniteAutomatonError("special action of rule (third parameter) is unrecognized")
+
+            except IndexError:
+                special_action = None
+
+            formated_rules.append(
+                (rule, token, special_action)
+            )
 
         nfa_start = self.build_nfa_from_rules(formated_rules)
 
@@ -380,10 +446,31 @@ class DFA:
         # conflicts when a string attains more than one terminal node in the NFA
         current_rule_priority = 1
 
-        for rule, token in rules:
-            _, terminal_node = DFA.add_rule_to_nfa(nfa_start, rule)
-            terminal_node.set_terminal_token(token, priority=current_rule_priority)
+        # Special actions such as trigger_on_contain need that all states be linked to the state marking the start
+        # of the action's accepted pattern with an epsilon transition, thus we collect all those states and connect
+        # them once the whole NFA has been generated.
+        totally_connected_states = []
+
+        for rule, token, special_action in rules:
+
+            if not special_action:
+                _, terminal_node = DFA.add_rule_to_nfa(nfa_start, rule)
+                terminal_node.set_terminal_token(token, priority=current_rule_priority)
+
+            elif special_action == "trigger_on_contain":
+                action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule)
+                action_node.add_special_action("trigger_on_contain", token)
+
+                totally_connected_states.append(action_start)
+
             current_rule_priority += 1
+
+        states_set = recover_nodes_set_from_nfa(nfa_start)
+
+        for target in totally_connected_states:
+            for state in states_set:
+                if state is not target and not state.terminal_exists():
+                    state.add_empty_transition_to_state(target)
 
         return nfa_start
 
@@ -481,6 +568,12 @@ class DFA:
         # A good example of what this algorithm is doing can be watched here:
         # https://www.youtube.com/watch?v=taClnxU-nao
         # We also store the parents from a given lookout for each node, this will be used in the minimisation step
+        #
+        # Additionally, we have to check that given a DFA node (equivalence class of NFA nodes), it is not only formed
+        # of fake nodes, i.e. nodes that have 'is_real_node' set to False. These nodes should be rejected as their
+        # only purpose is to change the behavior of the wanted DFA, not change it. Thus they are ignored if they do
+        # not intersect and equivalence class of real nodes (is_real_node = True)
+
         dfa_nodes_table = {}
 
         initial_epsilon_group = node_list_to_sorted_tuple_of_id(nfa.get_epsilon_star_group())
@@ -490,17 +583,30 @@ class DFA:
         # We have to add the error node because Hopcroft algorithm that will later be used to minimize the DFA
         # requires a complete DFA. We first add the error node in the table
         error_node_id = tuple()
-        dfa_nodes_table[error_node_id] = {'is_terminal': False, 'terminal': None, 'transitions': {},
-                                          'parents': {lookout: {error_node_id} for lookout in alphabet}}
+        dfa_nodes_table[error_node_id] = {'is_terminal': False,
+                                          'terminal': None,
+                                          'transitions': {},
+                                          'special_actions': [],
+                                          'parents': {lookout: {error_node_id} for lookout in alphabet}
+                                          }
 
         while dfa_nodes_queue:
             dfa_node = dfa_nodes_queue.pop()
 
             if dfa_node not in seen_nodes:
 
+                is_real_state = any([nodes_as_dict[id].is_real_state for id in dfa_node])
+
+                if not is_real_state:
+                    continue
+
                 if dfa_node not in dfa_nodes_table:
-                    dfa_nodes_table[dfa_node] = {'is_terminal': False, 'terminal': None, 'transitions': {},
-                                                 'parents': {lookout: set() for lookout in alphabet}}
+                    dfa_nodes_table[dfa_node] = {'is_terminal': False,
+                                                 'terminal': None,
+                                                 'transitions': {},
+                                                 'special_actions': [],
+                                                 'parents': {lookout: set() for lookout in alphabet}
+                                                 }
 
                 for lookout in alphabet:
 
@@ -515,16 +621,26 @@ class DFA:
                             epsilon_star_states |= node_list_to_set_of_id(epsilon_star_group)
 
                     new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else error_node_id
-                    dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
 
-                    if new_dfa_node not in dfa_nodes_table:
-                        dfa_nodes_table[new_dfa_node] = {'is_terminal': False, 'terminal': None, 'transitions': {},
-                                                         'parents': {lookout: set() for lookout in alphabet}}
+                    new_dfa_node_is_real_state = any([nodes_as_dict[id].is_real_state for id in new_dfa_node])
 
-                    dfa_nodes_table[new_dfa_node]['parents'][lookout].add(dfa_node)
+                    if new_dfa_node_is_real_state:
 
-                    if new_dfa_node:
-                        dfa_nodes_queue.append(new_dfa_node)
+                        dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
+
+                        if new_dfa_node not in dfa_nodes_table:
+
+                            # This is a placeholder for now, it will be filled later
+                            dfa_nodes_table[new_dfa_node] = {'is_terminal': False,
+                                                             'terminal': None,
+                                                             'transitions': {},
+                                                             'special_actions': [],
+                                                             'parents': {lookout: set() for lookout in alphabet}}
+
+                        dfa_nodes_table[new_dfa_node]['parents'][lookout].add(dfa_node)
+
+                        if new_dfa_node:
+                            dfa_nodes_queue.append(new_dfa_node)
 
                 seen_nodes.add(dfa_node)
 
@@ -534,6 +650,8 @@ class DFA:
         # A NFA can reach multiple terminal states at once, in the case of a DFA we recover all those terminal
         # states and take the one with the highest priority, that is the one which rule was given first when
         # building the NFA
+        # In this state we also recover the special actions of states. Unlike terminal instructions, a state can have
+        # multiple special actions, so we keep them all
         for sub_id in dfa_nodes_table:
             possible_terminals = [nodes_as_dict[id] for id in sub_id]
             terminal_node = get_max_priority_terminal(possible_terminals)
@@ -545,11 +663,21 @@ class DFA:
                 dfa_nodes_table[sub_id]['is_terminal'] = True
                 dfa_nodes_table[sub_id]['terminal'] = terminal_node.get_terminal_token()
 
+            # Recover the special actions
+            # Multiple special actions can be triggered on a same node
+            special_actions = reduce(
+                lambda l1, l2: l1 + l2,
+                [nodes_as_dict[id].special_actions for id in sub_id],
+                []
+                )
+            dfa_nodes_table[sub_id]['special_actions'] = special_actions
+
         # ========================================================
         # Minimize the DFA
         # ========================================================
         # dfa_node_table represents a DFA, but might not be minimal
         # We get the minimal DFA using Hopcroft's algorithm
+        # In the process, the algorithm removes the error state
 
         minimum_dfa = hopcrofts_algorithm(dfa_nodes_table, alphabet)
 
@@ -600,6 +728,9 @@ class DFA:
                 if target:
                     node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
 
+            # Set the special actions
+            node.set_special_actions(minimum_dfa[sub_id]['special_actions'])
+
             # We sort the lookouts for easy recovery
             node.sort_lookouts()
 
@@ -636,21 +767,23 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
     """
     # Partition the different terminal states since we know that if they have different terminal tokens, then they are
     # distinguishable
-    terminal_states_as_dict = {}
+    return_states_as_dict = {}
 
     for id in dfa_nodes_table:
         state = dfa_nodes_table[id]
 
-        if state['is_terminal']:
-            terminal = state['terminal']
+        if state['is_terminal'] or state['special_actions']:
+            # Action id is an hashable representation of the actions the state can lead to (terminal token an special
+            # actions together. In particular, two states with the same returning behavior will have the same action_id
+            action_id = (state['terminal'], frozenset(state['special_actions']))
 
-            if terminal in terminal_states_as_dict:
-                terminal_states_as_dict[terminal].add(id)
+            if action_id in return_states_as_dict:
+                return_states_as_dict[action_id].add(id)
 
             else:
-                terminal_states_as_dict[terminal] = {id}
+                return_states_as_dict[action_id] = {id}
 
-    terminal_states = {frozenset(states) for _, states in terminal_states_as_dict.items()}
+    terminal_states = {frozenset(states) for _, states in return_states_as_dict.items()}
     non_terminal_states = frozenset([id for id in dfa_nodes_table if not dfa_nodes_table[id]['is_terminal']])
 
     partition = {non_terminal_states}
@@ -719,14 +852,35 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
                     transitions[lookout] = mapping[target]
 
         # Hack to recover an item from a set
+        # We can use any node from the merged states since they all behave the same way
         for any in states:
             break
 
         minimal_dfa[states] = {'is_terminal': dfa_nodes_table[any]['is_terminal'],
                                'terminal': dfa_nodes_table[any]['terminal'],
+                               'special_actions': dfa_nodes_table[any]['special_actions'],
                                'transitions': transitions}
 
     return minimal_dfa
+
+
+def recover_nodes_set_from_nfa(nfa):
+    """
+    Given a Non-Deterministic Finite Automata, return a set of all the nodes it contains
+    """
+    nodes_set = set()
+    nodes_queue = [nfa]
+
+    while nodes_queue:
+        node = nodes_queue.pop()
+
+        if node not in nodes_set:
+            nodes_set.add(node)
+
+            for _, child in node.next_states:
+                nodes_queue.append(child)
+
+    return nodes_set
 
 
 def recover_nodes_and_lookouts_from_nfa(nfa):
@@ -1245,7 +1399,7 @@ def format_regexp(regexp):
     return regexp_tree
 
 
-def regexp_to_regexp_tree_list(regexp,  pos=0):
+def regexp_to_regexp_tree_list(regexp, pos=0):
     """
     Parse a regular expression and return it as a list of RegexpTree objects
     """
@@ -1329,7 +1483,7 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
         nodes = [node]
 
     elif regexp[pos] == "{":
-        end_pos = regexp.find("}", pos+1)
+        end_pos = regexp.find("}", pos + 1)
         min_max = regexp[pos + 1: end_pos].split(',')
         length = len(min_max)
 

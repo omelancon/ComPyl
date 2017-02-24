@@ -73,11 +73,13 @@ class Lexer:
             self.buffer = master.buffer
             self.params = master.params
 
-            def increment_line(increment=1):
+            def increment_line(*args):
+                increment = args[0] if args else 1
                 master.lineno += increment
                 self.lineno += increment
 
-            def increment_pos(increment=1):
+            def increment_pos(*args):
+                increment = args[0] if args else 1
                 master.lineno += increment
                 self.lineno += increment
 
@@ -97,9 +99,6 @@ class Lexer:
 
         # List of rules
         self.rules = []
-
-        # A special way to implement the line rule
-        self.line_rule = None
 
         # The Non-deterministic Finite Automaton that can later be optionally be saved
         self.nfa = None
@@ -139,7 +138,6 @@ class Lexer:
         Copy the lexer with its rules and DFA
         """
         dup = Lexer(rules=copy.copy(self.rules),
-                    line_rule=copy.copy(self.line_rule),
                     params=copy.copy(self.params)
                     )
         dup.lineno = self.lineno
@@ -163,12 +161,15 @@ class Lexer:
         self.pos = 0
 
     def set_line_rule(self, line_rule):
-        self.line_rule = line_rule
-        self.add_rules([(line_rule, None)])
+        line_incrementer = lambda t, v: t.increment_line()
+        self.add_rules([
+            (line_rule, None),
+            (line_rule, line_incrementer, "trigger_on_contain")
+        ])
 
     def add_rules(self, rules):
-        for regex, rule in rules:
-            self.rules.append((regex, rule))
+        for rule in rules:
+            self.rules.append(rule)
 
     def build(self):
         self.dfa = DFA(self.rules)
@@ -201,6 +202,7 @@ class Lexer:
         # Start at empty state of DFA
         self.dfa.reset_current_state()
 
+        init_lineno = self.lineno
         init_pos = self.pos
         terminal_token = None
 
@@ -214,6 +216,16 @@ class Lexer:
                 end_of_buffer = True
 
             lookout_state = None if end_of_buffer else self.dfa.push(lookout)
+
+            if lookout_state and lookout_state.has_special_action():
+                special_actions = lookout_state.get_special_actions()
+
+                for action_type, action in special_actions:
+
+                    if action_type == "trigger_on_contain":
+                        controller = self.LexerController(self)
+                        value = self.buffer[init_pos:self.pos]
+                        action(controller, value)
 
             if lookout_state is None:
                 try:
@@ -237,7 +249,7 @@ class Lexer:
 
         elif isinstance(terminal_token, str):
             # Case where the terminal token is a string
-            token = Token(terminal_token, value, lineno=self.lineno)
+            token = Token(terminal_token, value, lineno=init_lineno)
 
         else:
             # Case where the terminal token is a function to be called
@@ -260,15 +272,7 @@ class Lexer:
                 raise LexerError("Lexer rules as functions must return string or None")
 
             if not ignore:
-                token = Token(token_type, value, lineno=self.lineno)
-
-        # Auto-increment the line number by checking if line_rule match in the match
-        # TODO: This makes the lexer a 2 pass lexer, we could improve that by precomputing if linerule and current
-        # TODO: rule intersect
-        if self.line_rule:
-            line_rule_match = re.findall(self.line_rule, value)
-
-            self.lineno += len(line_rule_match)
+                token = Token(token_type, value, lineno=init_lineno)
 
         # Return if a non-ignored pattern was found, else continue lexing until a token is found
         return self.lex() if ignore else token
