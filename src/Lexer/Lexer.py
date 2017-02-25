@@ -161,7 +161,7 @@ class Lexer:
         self.pos = 0
 
     def set_line_rule(self, line_rule):
-        line_incrementer = lambda t, v: t.increment_line()
+        def line_incrementer(t, v): t.increment_line()
         self.add_rules([
             (line_rule, None),
             (line_rule, line_incrementer, "trigger_on_contain")

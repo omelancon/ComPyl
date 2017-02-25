@@ -58,13 +58,13 @@ def plot_nfa(nfa):
     # TODO: Update the drawing to used Graphviz and have actual self loops
     #loops = graph.nodes_with_selfloops()
 
-    colors = {node: 'r' if nodes_obj_as_dict[node].terminal_token else 'b' for node in graph.nodes()}
+    colors = {node: 'r' if nodes_obj_as_dict[node].terminal_exists() else 'y' if nodes_obj_as_dict[node].has_special_action() else 'b' for node in graph.nodes()}
 
     color_map = [colors.get(node) for node in graph.nodes()]
 
     networkx.draw(graph, pos=hierarchy_pos(graph, 0), with_labels=True, node_color=color_map)
     networkx.draw_networkx_edge_labels(graph, hierarchy_pos(graph, 0), edge_labels=edge_labels)
-    pyplot.savefig("visual_lexer.png")
+    pyplot.savefig("visual_lexer_nfa.png")
 
 
 def plot_dfa(dfa):
@@ -123,13 +123,13 @@ def plot_dfa(dfa):
     # TODO: Update the drawing to used Graphviz and have actual self loops
     #loops = graph.nodes_with_selfloops()
 
-    colors = {node: 'r' if nodes_obj_as_dict[node].terminal_exists() else 'b' for node in graph.nodes()}
+    colors = {node: 'r' if nodes_obj_as_dict[node].terminal_exists() else 'y' if nodes_obj_as_dict[node].has_special_action() else 'b' for node in graph.nodes()}
 
     color_map = [colors.get(node) for node in graph.nodes()]
 
     networkx.draw(graph, pos=networkx.circular_layout(graph), with_labels=True, node_color=color_map)
     networkx.draw_networkx_edge_labels(graph, networkx.circular_layout(graph), edge_labels=edge_labels)
-    pyplot.savefig("visual_lexer.png")
+    pyplot.savefig("visual_lexer_dfa.png")
 
 
 ###################

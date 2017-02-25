@@ -677,11 +677,15 @@ class DFA:
 
             # Recover the special actions
             # Multiple special actions can be triggered on a same node
-            special_actions = reduce(
-                lambda l1, l2: l1 + l2,
-                [nodes_as_dict[id].special_actions for id in sub_id],
-                []
-                )
+            special_actions = set()
+
+            for id in sub_id:
+                node_special_actions = nodes_as_dict[id].special_actions
+                for action in node_special_actions:
+                    special_actions.add(action)
+
+            special_actions = list(special_actions)
+
             dfa_nodes_table[sub_id]['special_actions'] = special_actions
 
         # ========================================================

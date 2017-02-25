@@ -3,18 +3,13 @@ from src.Visual import visual_lexer
 import copy
 
 rules = [
-    ("A", "A"),
-    ("[BC]", "BorC"),
-    ("#[H\n]+#", "COMMENT")
+    ("#_*#", "COMMENT")
 ]
 
-buffer = """B
-C
-#H
+buffer = """
+# a multi-line comment
 
-
-#
-A"""
+#"""
 
 lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
