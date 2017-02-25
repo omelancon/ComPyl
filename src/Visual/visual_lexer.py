@@ -39,6 +39,8 @@ def plot_nfa(nfa):
             elif -1 < lookout[0] == lookout[1]:
                 if 32 < lookout[1] < 128:
                     char = chr(lookout[1])
+                elif lookout[1] == 10:
+                    char = "\\n"
                 else:
                     char = '???'
 
@@ -102,6 +104,8 @@ def plot_dfa(dfa):
             elif -1 < lookout[0] == lookout[1]:
                 if 32 < lookout[1] < 128:
                     char = chr(lookout[1])
+                elif lookout[1] == 10:
+                    char = "\\n"
                 else:
                     char = '???'
 
@@ -119,7 +123,7 @@ def plot_dfa(dfa):
     # TODO: Update the drawing to used Graphviz and have actual self loops
     #loops = graph.nodes_with_selfloops()
 
-    colors = {node: 'r' if nodes_obj_as_dict[node].terminal_token else 'b' for node in graph.nodes()}
+    colors = {node: 'r' if nodes_obj_as_dict[node].terminal_exists() else 'b' for node in graph.nodes()}
 
     color_map = [colors.get(node) for node in graph.nodes()]
 

@@ -458,7 +458,7 @@ class DFA:
                 terminal_node.set_terminal_token(token, priority=current_rule_priority)
 
             elif special_action == "trigger_on_contain":
-                action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule)
+                action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule, is_real_state=False)
                 action_node.add_special_action("trigger_on_contain", token)
 
                 totally_connected_states.append(action_start)
@@ -469,13 +469,13 @@ class DFA:
 
         for target in totally_connected_states:
             for state in states_set:
-                if state is not target and not state.terminal_exists():
+                if state is not target:
                     state.add_empty_transition_to_state(target)
 
         return nfa_start
 
     @staticmethod
-    def add_rule_to_nfa(nfa_start, regexp):
+    def add_rule_to_nfa(nfa_start, regexp, is_real_state=True):
         """
         Add the given rule to the NFA.
         See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
@@ -488,21 +488,30 @@ class DFA:
 
             first = nfa_start.add_empty_transition()
 
+            if not is_real_state:
+                first.make_fake_state()
+
             if regexp.type == 'single':
                 min_ascii = regexp.min_ascii
                 max_ascii = regexp.max_ascii
 
                 next = first.add_transition_range(min_ascii, max_ascii)
-                _, last = DFA.add_rule_to_nfa(next, regexp.next)
+                _, last = DFA.add_rule_to_nfa(next, regexp.next, is_real_state=is_real_state)
+
+                if not is_real_state:
+                    next.make_fake_state()
 
             elif regexp.type == 'union':
-                fst_branch = DFA.add_rule_to_nfa(first, regexp.fst)
-                snd_branch = DFA.add_rule_to_nfa(first, regexp.snd)
+                fst_branch = DFA.add_rule_to_nfa(first, regexp.fst, is_real_state=is_real_state)
+                snd_branch = DFA.add_rule_to_nfa(first, regexp.snd, is_real_state=is_real_state)
 
                 next = fst_branch[1].add_empty_transition()
                 snd_branch[1].add_empty_transition_to_state(next)
 
-                _, last = DFA.add_rule_to_nfa(next, regexp.next)
+                _, last = DFA.add_rule_to_nfa(next, regexp.next, is_real_state=is_real_state)
+
+                if not is_real_state:
+                    next.make_fake_state()
 
             elif regexp.type == 'kleene':
                 # The regexp A* leads to the following NFA
@@ -513,7 +522,7 @@ class DFA:
                 #
                 # See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
 
-                s1, s2 = DFA.add_rule_to_nfa(first, regexp.pattern)
+                s1, s2 = DFA.add_rule_to_nfa(first, regexp.pattern, is_real_state=is_real_state)
                 s3 = s2.add_empty_transition()
                 # There should be a unique empty transition at this point
 
@@ -522,7 +531,10 @@ class DFA:
 
                 last = s3
 
-                _, last = DFA.add_rule_to_nfa(last, regexp.next)
+                _, last = DFA.add_rule_to_nfa(last, regexp.next, is_real_state=is_real_state)
+
+                if not is_real_state:
+                    last.make_fake_state()
 
             else:
                 raise RegexpTreeException("RegexpTree type found does not match 'single', 'union' or 'kleene'")
@@ -624,7 +636,7 @@ class DFA:
 
                     new_dfa_node_is_real_state = any([nodes_as_dict[id].is_real_state for id in new_dfa_node])
 
-                    if new_dfa_node_is_real_state:
+                    if new_dfa_node_is_real_state or new_dfa_node is error_node_id:
 
                         dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
 
@@ -775,7 +787,7 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
         if state['is_terminal'] or state['special_actions']:
             # Action id is an hashable representation of the actions the state can lead to (terminal token an special
             # actions together. In particular, two states with the same returning behavior will have the same action_id
-            action_id = (state['terminal'], frozenset(state['special_actions']))
+            action_id = (state['is_terminal'], state['terminal'], frozenset(state['special_actions']))
 
             if action_id in return_states_as_dict:
                 return_states_as_dict[action_id].add(id)
