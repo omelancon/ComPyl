@@ -641,7 +641,6 @@ class DFA:
                         dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
 
                         if new_dfa_node not in dfa_nodes_table:
-
                             # This is a placeholder for now, it will be filled later
                             dfa_nodes_table[new_dfa_node] = {'is_terminal': False,
                                                              'terminal': None,
@@ -783,7 +782,7 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
     """
     # Partition the different terminal states since we know that if they have different terminal tokens, then they are
     # distinguishable
-    return_states_as_dict = {}
+    active_states_as_dict = {}
 
     for id in dfa_nodes_table:
         state = dfa_nodes_table[id]
@@ -793,20 +792,21 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
             # actions together. In particular, two states with the same returning behavior will have the same action_id
             action_id = (state['is_terminal'], state['terminal'], frozenset(state['special_actions']))
 
-            if action_id in return_states_as_dict:
-                return_states_as_dict[action_id].add(id)
+            if action_id in active_states_as_dict:
+                active_states_as_dict[action_id].add(id)
 
             else:
-                return_states_as_dict[action_id] = {id}
+                active_states_as_dict[action_id] = {id}
 
-    terminal_states = {frozenset(states) for _, states in return_states_as_dict.items()}
-    non_terminal_states = frozenset([id for id in dfa_nodes_table if not dfa_nodes_table[id]['is_terminal']])
+    active_states = {frozenset(states) for _, states in active_states_as_dict.items()}
+    inactive_states = frozenset([id for id in dfa_nodes_table if
+                                 not (dfa_nodes_table[id]['is_terminal'] or dfa_nodes_table[id]['special_actions'])])
 
-    partition = {non_terminal_states}
-    partition |= terminal_states
+    partition = {inactive_states}
+    partition |= active_states
 
     # Refine the sets
-    sets_to_refine = terminal_states
+    sets_to_refine = active_states
 
     while sets_to_refine:
         analyzed_set = sets_to_refine.pop()
