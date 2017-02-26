@@ -1,6 +1,8 @@
 import copy
 from itertools import count
-import re
+
+import src.RegExp.IntervalOperations as IntervalOp
+import src.RegExp.RegExp as RegExp
 
 
 # ======================================================================================================================
@@ -25,7 +27,7 @@ class NodeFiniteAutomaton(object):
     # Special terminal values reserved for a terminal state that is ignored (no returned token)
     IGNORED = -1
 
-    def __init__(self, terminal_token=None, counter=None):
+    def __init__(self, terminal_token=None, special_actions=None, counter=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
@@ -36,8 +38,12 @@ class NodeFiniteAutomaton(object):
         # Terminal token is intended to be either a string or a function returning a string
         self.terminal_token = terminal_token
 
+        # Special action is a function returning None, but acting on the state of the lexer
+        # It is returned to be called by the lexer when the DFA encounters a pattern contained into a main pattern
+        self.special_actions = special_actions if special_actions else []
+
     def __str__(self):
-        return "<State '%d'>" % (self.id)
+        return "<State '%d'>" % self.id
 
     def add_transition_range(self, min_ascii, max_ascii, *args, **kwargs):
         """
@@ -126,13 +132,46 @@ class NodeFiniteAutomaton(object):
         else:
             raise NodeIsNotTerminalState
 
+    def add_special_action(self, action_type, action):
+        """
+        Add the given action to the special actions list
+        """
+        self.special_actions.append((action_type, action))
+
+    def get_special_actions(self):
+        """
+        Return the list of special actions of the node
+        """
+        return self.special_actions
+
+    def set_special_actions(self, actions):
+        """
+        Replace the current special actions of the node by the new list of special actions
+        """
+        self.special_actions = []
+
+        for action in actions:
+            self.add_special_action(*action)
+
+    def has_special_action(self):
+        """
+        Returns True if the state has special actions, False otherwise
+        """
+        return bool(self.special_actions)
+
 
 class NodeNFA(NodeFiniteAutomaton):
     def __init__(self, *args, **kwargs):
         super(NodeNFA, self).__init__(*args, **kwargs)
 
+        # Priority of the terminal token of the current node, allowing to choose the right rule when merging NFA nodes
         self.terminal_priority = kwargs['terminal_priority'] if 'terminal_priority' in kwargs else None
+
+        # An epsilon star group is the set of all nodes connected to the current node by one or more empty transition
         self.epsilon_star_group = None
+
+        # Any state with is_real_state set to False cannot lead to the creation of a DFA node by itself
+        self.is_real_state = kwargs['is_real_state'] if 'is_real_state' in kwargs else True
 
     def set_terminal_token(self, terminal_token, priority=None):
         """
@@ -144,6 +183,12 @@ class NodeNFA(NodeFiniteAutomaton):
         if not self.terminal_exists():
             self.terminal_priority = priority
 
+    def make_real_state(self):
+        self.is_real_state = True
+
+    def make_fake_state(self):
+        self.is_real_state = False
+
     def get_transition_states_for_lookout(self, lookout):
         """
         Given a lookout (ascii value as int), return all the transition states attained by this lookout
@@ -151,7 +196,7 @@ class NodeNFA(NodeFiniteAutomaton):
         states = []
 
         for transition in self.next_states:
-            if value_is_in_range(lookout, transition[0]):
+            if IntervalOp.value_is_in_range(lookout, transition[0]):
                 states.append(transition[1])
 
         return states
@@ -175,7 +220,7 @@ class NodeNFA(NodeFiniteAutomaton):
         states = []
 
         for transition in self.next_states:
-            if is_proper_subinterval(interval, transition[0]):
+            if IntervalOp.is_proper_subinterval(interval, transition[0]):
                 states.append(transition[1])
 
         return states
@@ -192,7 +237,7 @@ class NodeNFA(NodeFiniteAutomaton):
     def _calculate_epsilon_star_group(self, _group=None, force_recalculate=False):
         """
         Add all nodes linked by 0 or more epsilon (empty) transition from self, including self, to _group.
-        Store the new _group is self.epsilon_star_group if we are at top level (_group is None)
+        Store the new _group in self.epsilon_star_group if we are at top level (_group is None)
         Then return the _group as set
         """
         # We will write the group to self only if save is True, that is for the node that called the initial calculation
@@ -203,12 +248,13 @@ class NodeNFA(NodeFiniteAutomaton):
             save = True
 
         for node in self.get_transition_for_empty_string():
-            if force_recalculate or node.epsilon_star_group is None:
-                node_group = node._calculate_epsilon_star_group(_group=_group, force_recalculate=force_recalculate)
-            else:
-                node_group = node.epsilon_star_group
+            if node is not self:
+                if force_recalculate or node.epsilon_star_group is None:
+                    node_group = node._calculate_epsilon_star_group(_group=_group, force_recalculate=force_recalculate)
+                else:
+                    node_group = node.epsilon_star_group
 
-            _group |= node_group
+                _group |= node_group
 
         _group.add(self)
         if save:
@@ -224,6 +270,7 @@ class NodeDFA(NodeFiniteAutomaton):
         """
         dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
         dup.id = self.id
+        dup.special_actions = copy.copy(self.special_actions)
         dup.next_states = {lookout: state for lookout, state in self.next_states}
 
         return dup
@@ -239,6 +286,7 @@ class NodeDFA(NodeFiniteAutomaton):
             dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
             dup.id = self.id
             memo[id(self)] = dup
+            dup.special_actions = copy.copy(self.special_actions)
             dup.next_states = [(lookout, state.__deepcopy__(memo)) for lookout, state in self.next_states]
 
             return dup
@@ -248,7 +296,7 @@ class NodeDFA(NodeFiniteAutomaton):
         Follow the lookout and return the next state, None if no state is attained from the lookout.
         Before transitions can be executed, the state has to have its 'next_states' list sorted with sort_lookouts()
         """
-        value = binary_search_on_transitions(ascii, self.next_states)
+        value = IntervalOp.binary_search_on_transitions(ascii, self.next_states)
 
         return value[1] if value else None
 
@@ -256,7 +304,7 @@ class NodeDFA(NodeFiniteAutomaton):
         """
         Sort self.next_states by lookouts so they can be easily searched afterward
         """
-        self.next_states.sort(cmp=lambda x, y: interval_cmp(x[0], y[0]))
+        self.next_states.sort(cmp=lambda x, y: IntervalOp.interval_cmp(x[0], y[0]))
 
 
 class DFA:
@@ -289,7 +337,27 @@ class DFA:
         Build the DFA according to the given rules, save its starting node as self.start and initialize its
         current_state to the start
         """
-        formated_rules = [(format_regexp(rule), token) for rule, token in rules]
+        formated_rules = []
+
+        for packed_rule in rules:
+            rule = RegExp.format_regexp(packed_rule[0])
+            token = packed_rule[1]
+            try:
+                if packed_rule[2] == "trigger_on_contain":
+                    if not callable(token):
+                        raise FiniteAutomatonError("token of special action trigger_on_contain must be a function")
+
+                    special_action = "trigger_on_contain"
+
+                else:
+                    raise FiniteAutomatonError("special action of rule (third parameter) is unrecognized")
+
+            except IndexError:
+                special_action = None
+
+            formated_rules.append(
+                (rule, token, special_action)
+            )
 
         nfa_start = self.build_nfa_from_rules(formated_rules)
 
@@ -380,15 +448,36 @@ class DFA:
         # conflicts when a string attains more than one terminal node in the NFA
         current_rule_priority = 1
 
-        for rule, token in rules:
-            _, terminal_node = DFA.add_rule_to_nfa(nfa_start, rule)
-            terminal_node.set_terminal_token(token, priority=current_rule_priority)
+        # Special actions such as trigger_on_contain need that all states be linked to the state marking the start
+        # of the action's accepted pattern with an epsilon transition, thus we collect all those states and connect
+        # them once the whole NFA has been generated.
+        totally_connected_states = []
+
+        for rule, token, special_action in rules:
+
+            if not special_action:
+                _, terminal_node = DFA.add_rule_to_nfa(nfa_start, rule)
+                terminal_node.set_terminal_token(token, priority=current_rule_priority)
+
+            elif special_action == "trigger_on_contain":
+                action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule, is_real_state=False)
+                action_node.add_special_action("trigger_on_contain", token)
+
+                totally_connected_states.append(action_start)
+
             current_rule_priority += 1
+
+        states_set = recover_nodes_set_from_nfa(nfa_start)
+
+        for target in totally_connected_states:
+            for state in states_set:
+                if state is not target:
+                    state.add_empty_transition_to_state(target)
 
         return nfa_start
 
     @staticmethod
-    def add_rule_to_nfa(nfa_start, regexp):
+    def add_rule_to_nfa(nfa_start, regexp, is_real_state=True):
         """
         Add the given rule to the NFA.
         See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
@@ -401,21 +490,30 @@ class DFA:
 
             first = nfa_start.add_empty_transition()
 
+            if not is_real_state:
+                first.make_fake_state()
+
             if regexp.type == 'single':
                 min_ascii = regexp.min_ascii
                 max_ascii = regexp.max_ascii
 
                 next = first.add_transition_range(min_ascii, max_ascii)
-                _, last = DFA.add_rule_to_nfa(next, regexp.next)
+                _, last = DFA.add_rule_to_nfa(next, regexp.next, is_real_state=is_real_state)
+
+                if not is_real_state:
+                    next.make_fake_state()
 
             elif regexp.type == 'union':
-                fst_branch = DFA.add_rule_to_nfa(first, regexp.fst)
-                snd_branch = DFA.add_rule_to_nfa(first, regexp.snd)
+                fst_branch = DFA.add_rule_to_nfa(first, regexp.fst, is_real_state=is_real_state)
+                snd_branch = DFA.add_rule_to_nfa(first, regexp.snd, is_real_state=is_real_state)
 
                 next = fst_branch[1].add_empty_transition()
                 snd_branch[1].add_empty_transition_to_state(next)
 
-                _, last = DFA.add_rule_to_nfa(next, regexp.next)
+                _, last = DFA.add_rule_to_nfa(next, regexp.next, is_real_state=is_real_state)
+
+                if not is_real_state:
+                    next.make_fake_state()
 
             elif regexp.type == 'kleene':
                 # The regexp A* leads to the following NFA
@@ -426,7 +524,7 @@ class DFA:
                 #
                 # See http://www.cs.may.ie/staff/jpower/Courses/Previous/parsing/node5.html
 
-                s1, s2 = DFA.add_rule_to_nfa(first, regexp.pattern)
+                s1, s2 = DFA.add_rule_to_nfa(first, regexp.pattern, is_real_state=is_real_state)
                 s3 = s2.add_empty_transition()
                 # There should be a unique empty transition at this point
 
@@ -435,10 +533,13 @@ class DFA:
 
                 last = s3
 
-                _, last = DFA.add_rule_to_nfa(last, regexp.next)
+                _, last = DFA.add_rule_to_nfa(last, regexp.next, is_real_state=is_real_state)
+
+                if not is_real_state:
+                    last.make_fake_state()
 
             else:
-                raise RegexpTreeException("RegexpTree type found does not match 'single', 'union' or 'kleene'")
+                raise RegExp.RegexpTreeException("RegexpTree type found does not match 'single', 'union' or 'kleene'")
 
             return first, last
 
@@ -472,7 +573,7 @@ class DFA:
         # Since our edges are intervals, we use a Minimal Covering Set of Intervals as our alphabet, see the doc string
         # of function get_minimal_covering_intervals for definition of a MCSI
         # EMPTY is not in the alphabet (epsilon is an element of A*, not in A, where A is the alphabet), so we remove it
-        alphabet = get_minimal_covering_intervals(edges_lookouts)
+        alphabet = IntervalOp.get_minimal_covering_intervals(edges_lookouts)
         alphabet.remove(NodeNFA.EMPTY)
 
         # ========================================================
@@ -481,6 +582,12 @@ class DFA:
         # A good example of what this algorithm is doing can be watched here:
         # https://www.youtube.com/watch?v=taClnxU-nao
         # We also store the parents from a given lookout for each node, this will be used in the minimisation step
+        #
+        # Additionally, we have to check that given a DFA node (equivalence class of NFA nodes), it is not only formed
+        # of fake nodes, i.e. nodes that have 'is_real_node' set to False. These nodes should be rejected as their
+        # only purpose is to change the behavior of the wanted DFA, not change it. Thus they are ignored if they do
+        # not intersect and equivalence class of real nodes (is_real_node = True)
+
         dfa_nodes_table = {}
 
         initial_epsilon_group = node_list_to_sorted_tuple_of_id(nfa.get_epsilon_star_group())
@@ -490,17 +597,30 @@ class DFA:
         # We have to add the error node because Hopcroft algorithm that will later be used to minimize the DFA
         # requires a complete DFA. We first add the error node in the table
         error_node_id = tuple()
-        dfa_nodes_table[error_node_id] = {'is_terminal': False, 'terminal': None, 'transitions': {},
-                                          'parents': {lookout: {error_node_id} for lookout in alphabet}}
+        dfa_nodes_table[error_node_id] = {'is_terminal': False,
+                                          'terminal': None,
+                                          'transitions': {},
+                                          'special_actions': [],
+                                          'parents': {lookout: {error_node_id} for lookout in alphabet}
+                                          }
 
         while dfa_nodes_queue:
             dfa_node = dfa_nodes_queue.pop()
 
             if dfa_node not in seen_nodes:
 
+                is_real_state = any([nodes_as_dict[id].is_real_state for id in dfa_node])
+
+                if not is_real_state:
+                    continue
+
                 if dfa_node not in dfa_nodes_table:
-                    dfa_nodes_table[dfa_node] = {'is_terminal': False, 'terminal': None, 'transitions': {},
-                                                 'parents': {lookout: set() for lookout in alphabet}}
+                    dfa_nodes_table[dfa_node] = {'is_terminal': False,
+                                                 'terminal': None,
+                                                 'transitions': {},
+                                                 'special_actions': [],
+                                                 'parents': {lookout: set() for lookout in alphabet}
+                                                 }
 
                 for lookout in alphabet:
 
@@ -515,16 +635,25 @@ class DFA:
                             epsilon_star_states |= node_list_to_set_of_id(epsilon_star_group)
 
                     new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else error_node_id
-                    dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
 
-                    if new_dfa_node not in dfa_nodes_table:
-                        dfa_nodes_table[new_dfa_node] = {'is_terminal': False, 'terminal': None, 'transitions': {},
-                                                         'parents': {lookout: set() for lookout in alphabet}}
+                    new_dfa_node_is_real_state = any([nodes_as_dict[id].is_real_state for id in new_dfa_node])
 
-                    dfa_nodes_table[new_dfa_node]['parents'][lookout].add(dfa_node)
+                    if new_dfa_node_is_real_state or new_dfa_node is error_node_id:
 
-                    if new_dfa_node:
-                        dfa_nodes_queue.append(new_dfa_node)
+                        dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
+
+                        if new_dfa_node not in dfa_nodes_table:
+                            # This is a placeholder for now, it will be filled later
+                            dfa_nodes_table[new_dfa_node] = {'is_terminal': False,
+                                                             'terminal': None,
+                                                             'transitions': {},
+                                                             'special_actions': [],
+                                                             'parents': {lookout: set() for lookout in alphabet}}
+
+                        dfa_nodes_table[new_dfa_node]['parents'][lookout].add(dfa_node)
+
+                        if new_dfa_node:
+                            dfa_nodes_queue.append(new_dfa_node)
 
                 seen_nodes.add(dfa_node)
 
@@ -534,6 +663,8 @@ class DFA:
         # A NFA can reach multiple terminal states at once, in the case of a DFA we recover all those terminal
         # states and take the one with the highest priority, that is the one which rule was given first when
         # building the NFA
+        # In this state we also recover the special actions of states. Unlike terminal instructions, a state can have
+        # multiple special actions, so we keep them all
         for sub_id in dfa_nodes_table:
             possible_terminals = [nodes_as_dict[id] for id in sub_id]
             terminal_node = get_max_priority_terminal(possible_terminals)
@@ -545,11 +676,25 @@ class DFA:
                 dfa_nodes_table[sub_id]['is_terminal'] = True
                 dfa_nodes_table[sub_id]['terminal'] = terminal_node.get_terminal_token()
 
+            # Recover the special actions
+            # Multiple special actions can be triggered on a same node
+            special_actions = set()
+
+            for id in sub_id:
+                node_special_actions = nodes_as_dict[id].special_actions
+                for action in node_special_actions:
+                    special_actions.add(action)
+
+            special_actions = list(special_actions)
+
+            dfa_nodes_table[sub_id]['special_actions'] = special_actions
+
         # ========================================================
         # Minimize the DFA
         # ========================================================
         # dfa_node_table represents a DFA, but might not be minimal
         # We get the minimal DFA using Hopcroft's algorithm
+        # In the process, the algorithm removes the error state
 
         minimum_dfa = hopcrofts_algorithm(dfa_nodes_table, alphabet)
 
@@ -572,7 +717,7 @@ class DFA:
             new_transitions = {}
 
             for target, lookouts in inverse_map.items():
-                new_lookouts = merge_intervals(lookouts)
+                new_lookouts = IntervalOp.merge_intervals(lookouts)
 
                 for lookout in new_lookouts:
                     new_transitions[lookout] = target
@@ -599,6 +744,9 @@ class DFA:
             for lookout, target in minimum_dfa[sub_id]['transitions'].items():
                 if target:
                     node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
+
+            # Set the special actions
+            node.set_special_actions(minimum_dfa[sub_id]['special_actions'])
 
             # We sort the lookouts for easy recovery
             node.sort_lookouts()
@@ -636,28 +784,31 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
     """
     # Partition the different terminal states since we know that if they have different terminal tokens, then they are
     # distinguishable
-    terminal_states_as_dict = {}
+    active_states_as_dict = {}
 
     for id in dfa_nodes_table:
         state = dfa_nodes_table[id]
 
-        if state['is_terminal']:
-            terminal = state['terminal']
+        if state['is_terminal'] or state['special_actions']:
+            # Action id is an hashable representation of the actions the state can lead to (terminal token an special
+            # actions together. In particular, two states with the same returning behavior will have the same action_id
+            action_id = (state['is_terminal'], state['terminal'], frozenset(state['special_actions']))
 
-            if terminal in terminal_states_as_dict:
-                terminal_states_as_dict[terminal].add(id)
+            if action_id in active_states_as_dict:
+                active_states_as_dict[action_id].add(id)
 
             else:
-                terminal_states_as_dict[terminal] = {id}
+                active_states_as_dict[action_id] = {id}
 
-    terminal_states = {frozenset(states) for _, states in terminal_states_as_dict.items()}
-    non_terminal_states = frozenset([id for id in dfa_nodes_table if not dfa_nodes_table[id]['is_terminal']])
+    active_states = {frozenset(states) for _, states in active_states_as_dict.items()}
+    inactive_states = frozenset([id for id in dfa_nodes_table if
+                                 not (dfa_nodes_table[id]['is_terminal'] or dfa_nodes_table[id]['special_actions'])])
 
-    partition = {non_terminal_states}
-    partition |= terminal_states
+    partition = {inactive_states}
+    partition |= active_states
 
     # Refine the sets
-    sets_to_refine = terminal_states
+    sets_to_refine = active_states
 
     while sets_to_refine:
         analyzed_set = sets_to_refine.pop()
@@ -719,14 +870,35 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
                     transitions[lookout] = mapping[target]
 
         # Hack to recover an item from a set
+        # We can use any node from the merged states since they all behave the same way
         for any in states:
             break
 
         minimal_dfa[states] = {'is_terminal': dfa_nodes_table[any]['is_terminal'],
                                'terminal': dfa_nodes_table[any]['terminal'],
+                               'special_actions': dfa_nodes_table[any]['special_actions'],
                                'transitions': transitions}
 
     return minimal_dfa
+
+
+def recover_nodes_set_from_nfa(nfa):
+    """
+    Given a Non-Deterministic Finite Automata, return a set of all the nodes it contains
+    """
+    nodes_set = set()
+    nodes_queue = [nfa]
+
+    while nodes_queue:
+        node = nodes_queue.pop()
+
+        if node not in nodes_set:
+            nodes_set.add(node)
+
+            for _, child in node.next_states:
+                nodes_queue.append(child)
+
+    return nodes_set
 
 
 def recover_nodes_and_lookouts_from_nfa(nfa):
@@ -777,804 +949,3 @@ def node_list_to_sorted_tuple_of_id(node_list):
 
 def node_list_to_set_of_id(node_list):
     return set([node.id for node in node_list])
-
-
-# ======================================================================================================================
-# Set operations
-# ======================================================================================================================
-
-def interval_cmp(x, y):
-    """
-    Dictionary order comparator for intervals
-    """
-    if x[0] > y[0]:
-        return 1
-    elif x[0] < y[0]:
-        return -1
-    elif x[1] > y[1]:
-        return 1
-    elif x[1] < y[1]:
-        return -1
-    else:
-        return 0
-
-
-def value_interval_cmp(value, interval):
-    """
-    Comparator that indicates if a value is within, higher or lower than an interval
-    """
-
-    if interval[0] <= value <= interval[1]:
-        return 0
-    elif value < interval[0]:
-        return -1
-    else:
-        return 1
-
-
-def binary_search_on_transitions(target, transitions):
-    """
-    Binary search for a transition in a sorted list of (interval, transition).
-    Return the found transition, None if not found
-    """
-    left = 0
-    right = len(transitions) - 1
-
-    while left <= right:
-        index = (left + right) / 2
-        min, max = transitions[index][0]
-
-        if target < min:
-            right = index - 1
-        elif target > max:
-            left = index + 1
-        else:
-            return transitions[index]
-
-    return None
-
-
-def binary_search_value_in_intervals(target, intervals, return_closest=False):
-    """
-    Binary search for a value in a sorted list of intervals.
-    Return the position of the found interval, None if not found
-    If return_closest is set to True, the index will be returned even if the target was found in no interval, this is
-    needed if we want to use binary search to find a super-interval's boundaries.
-    """
-    left = 0
-    right = len(intervals) - 1
-    index = None
-
-    while left <= right:
-        index = (left + right) / 2
-        min, max = intervals[index]
-
-        if target < min:
-            right = index - 1
-        elif target > max:
-            left = index + 1
-        else:
-            return index
-
-    return index if return_closest else None
-
-
-def value_is_in_range(value, range):
-    """
-    :param value: an int (x)
-    :param range: a tuple of int (min, max)
-    :return: True if x from min to max, False otherwise
-    """
-    return range[0] <= value <= range[1]
-
-
-def is_proper_subinterval(subinterval, interval):
-    """
-    Return True if subinterval (x_1, x_2) is a subset of interval (y_1, y_2), else False
-    """
-    return value_is_in_range(subinterval[0], interval) and value_is_in_range(subinterval[1], interval)
-
-
-def merge_intervals(intervals):
-    """
-    Given a list of intervals, return a new list of intervals where the adjacent intervals are merged.
-    Ex: [(1,3), (4,6), (10,11)] would be returned as [(1, 6), (10, 11)]
-    """
-    if not intervals:
-        return []
-
-    intervals.sort(cmp=interval_cmp)
-
-    merged_intervals = []
-    min = max = intervals[0][0]
-
-    for interval in intervals:
-        if interval[0] > max + 1:
-            merged_intervals.append((min, max))
-            min = interval[0]
-
-        max = interval[1]
-
-    merged_intervals.append((min, max))
-
-    return merged_intervals
-
-
-def set_to_intervals(ascii_set):
-    """
-    Given a set of int, return a list of intervals covering those ints exactly
-    ex: the set {1,2,3,5,6,9} would be returned as [(1,3), (5,6), (9,9)]
-    """
-
-    set_size = len(ascii_set)
-
-    if set_size == 0:
-        return []
-
-    else:
-
-        ascii_list = list(ascii_set)
-        ascii_list.sort()
-
-        # Hack so the last interval in the list is added
-        ascii_list.append(float('inf'))
-
-        interval_list = []
-
-        min = max = ascii_list[0]
-
-        index = 1
-        while index <= set_size:
-            ascii = ascii_list[index]
-            if ascii == max + 1:
-                max += 1
-            else:
-                interval_list.append((min, max))
-                min = max = ascii
-
-            index += 1
-
-        return interval_list
-
-
-def get_minimal_covering_intervals(intervals):
-    """
-    Given a list of intervals (min_int, max_int) which might overlap, return a minimal covering set of intervals
-    The Minimal Covering Set of Interval (MCSI) is the set of intervals that has the following properties:
-
-    1) The MCSI forms a disjoint partition of the union of the initial set
-       i.e. they represent the same overall values, but the MSCI doesn't allow overlaps anymore
-
-    2) For each interval A in MCSI and each interval B in the initial set of intervals, then either
-       i) A is a proper subset of B (A and B = A)
-       ii) or A and B are disjoint
-
-    3) The MCSI is the smallest set such that the two above rules are respected
-       It doesn't mean it is unique, solely that any other such set has the same cardinality
-
-    Ex: Given the set {(1,5), (3, 7), (9,34), (15,15)}, we would return
-        {(1,2), (3,5), (6,7), (8,14), (15, 15), (16, 34)}
-
-    This is a way here to partition the intervals of ascii values in the lookouts of an FDA to get the lookout values
-    of a DFA
-    """
-
-    def rec(intervals):
-        if not intervals:
-            return []
-
-        if len(intervals) == 1:
-            return intervals
-
-        intervals.sort(cmp=interval_cmp)
-
-        left = intervals[0][0]
-        right = intervals[0][1]
-
-        for el in intervals:
-            if el[0] == left:
-                continue
-            elif el[0] <= right:
-                right = el[0] - 1
-                break
-            else:
-                break
-
-        # Remove intervals below (right + 1) and truncate others such that their minimum > max
-        truncated_intervals = [(right + 1, el[1]) if el[0] <= right else el for el in intervals if el[1] > right]
-
-        return [(left, right)] + rec(truncated_intervals)
-
-    return rec(intervals)
-
-
-def inverse_intervals_list(intervals):
-    """
-    Given a list of intervals, return the inverse of the union of the intervals
-    """
-
-    inverse = [(0, 255)]
-
-    for interval in intervals:
-        min, max = interval
-
-        if min > max:
-            raise ValueError("the lower bound of an interval must be leq than the upper bound")
-
-        min_pos = binary_search_value_in_intervals(min, inverse, return_closest=True)
-
-        # min_is_inside indicates if the min is contained in an interval
-        # 0  => the min is contained in the interval at min_pos
-        # 1  => the min is above the interval at min_pos
-        # -1 => the min is below the interval at min_pos
-        min_is_inside = value_interval_cmp(min, inverse[min_pos])
-
-        max_pos = binary_search_value_in_intervals(max, inverse, return_closest=True)
-
-        # Idem as min_is_inside, but for the max
-        max_is_inside = value_interval_cmp(max, inverse[max_pos])
-
-        # Case where we truncate the interval
-        if min_is_inside == 0:
-            matching_interval = inverse[min_pos]
-
-            left = inverse[:min_pos]
-
-            # Append the truncated interval if there is something remaining
-            if matching_interval[0] < min:
-                left.append((matching_interval[0], min - 1))
-
-        # min is below min_pos, thus keep everything below min_pos, min_pos excluded
-        elif min_is_inside == -1:
-            left = inverse[:min_pos]
-
-        # min is above min_pos, thus keep everything below min_pos, min_pos included
-        elif min_is_inside == 1:
-            try:
-                _ = inverse[min_pos + 1]
-            except IndexError:
-                # Case where the min is above, and there is nothing above, thus inverse is not mutated
-                continue
-            left = inverse[:min_pos + 1]
-
-        # Same logic as above but for the maximum
-        if max_is_inside == 0:
-            matching_interval = inverse[max_pos]
-
-            right = inverse[max_pos + 1:]
-
-            if matching_interval[1] > max:
-                right.insert(0, (max + 1, matching_interval[1]))
-
-        elif max_is_inside == -1:
-            right = inverse[max_pos:]
-
-        elif min_is_inside == 1:
-            right = inverse[max_pos + 1:]
-
-        inverse = left + right
-
-    return inverse
-
-
-# ======================================================================================================================
-# Tokenize RegExp
-# ======================================================================================================================
-
-# In this section are the tools that take a regular expression as string and transform it to a bare-bone format.
-# By bare-bone format we mean that complex regexp operators are reduced to basic regexps, that is characters (intervals
-# in our case), union (or) and kleene operator (*).
-#
-# From this format the algorithm to build a Non-Deterministic Finite Automata is very simple.
-#
-# Here are some example of how regexps are reduced:
-#
-# a+ => aa*
-# a? => ()|a
-# a{2,3} => a(a|aa)     this is not exactly what happens, but this is the idea
-# . => (0,9)|(11,255)   this one is a demonstration of how the interval notation works, since . means anything but \n
-#                       we convert it to any ascii value that is not \n (10)
-
-class RegexpTreeException(Exception):
-    pass
-
-
-class RegexpParsingException(Exception):
-    pass
-
-
-class RegexpTree:
-    """
-    A tree structure of a regexp.
-    Reduce a regexp to basic regexp tokens, that is characters, unions (or) and kleene operator (*)
-    Characters are treated in intervals.
-    """
-
-    def __init__(self, node_type, *values):
-
-        if node_type in ['single', 'union', 'kleene']:
-            self.type = node_type
-
-        else:
-            raise RegexpTreeException("node type (first arg) must be 'single', 'union' or 'kleene'")
-
-        if node_type == "single":
-            self.min_ascii = values[0]
-            self.max_ascii = values[1]
-            self.next = values[2] if len(values) > 2 else None
-
-        elif node_type == "union":
-            self.fst = values[0]
-            self.snd = values[1]
-            self.next = values[2] if len(values) > 2 else None
-
-        elif node_type == 'kleene':
-            self.pattern = values[0]
-            self.next = values[1] if len(values) > 1 else None
-
-    def __str__(self):
-        return "<RegexpTree '%s'>" % self.type
-
-    def __copy__(self):
-        if self.type == 'single':
-            dup = RegexpTree(
-                'single',
-                self.min_ascii,
-                self.max_ascii,
-                self.next
-            )
-
-        elif self.type == 'union':
-            dup = RegexpTree(
-                'union',
-                self.fst,
-                self.snd,
-                self.next
-            )
-
-        elif self.type == 'kleene':
-            dup = RegexpTree(
-                'kleene',
-                self.pattern,
-                self.next
-            )
-
-        return dup
-
-    def __deepcopy__(self, memo):
-        if id(self) in memo:
-            raise RegexpTreeException("found loop in RegexpTree while deepcopying")
-        else:
-            memo[id(self)] = self
-
-        if self.type == 'single':
-            dup = RegexpTree(
-                'single',
-                self.min_ascii,
-                self.max_ascii,
-                self.next.__deepcopy__({}) if self.next else None
-            )
-
-        elif self.type == 'union':
-            dup = RegexpTree(
-                'union',
-                self.fst.__deepcopy__({}),
-                self.snd.__deepcopy__({}),
-                self.next.__deepcopy__({}) if self.next else None
-            )
-
-        elif self.type == 'kleene':
-            dup = RegexpTree(
-                'kleene',
-                self.pattern.__deepcopy__({}),
-                self.next.__deepcopy__({}) if self.next else None
-            )
-
-        return dup
-
-    def extend(self, next):
-        """
-        Add the given RegexpTree at the end of the chain of RegexpTrees starting at self
-        """
-        if self.next is None:
-            self.next = next
-        else:
-            self.next.extend(next)
-
-    def pop(self):
-        """
-        Remove the last RegexTree instruction at the end of the chain starting at self
-        """
-        if self.next is None:
-            return None
-
-        elif self.next.next is None:
-            pop = self.next
-            self.next = None
-            return pop
-
-        else:
-            return self.next.pop()
-
-    def truncate(self):
-        """
-        Delete the upcoming part of the RegexpTree chain
-        """
-        self.next = None
-
-    def print_regexp(self):
-        """
-        Return the corresponding regexp as string
-        """
-        if self.type == 'single':
-            if self.min_ascii == self.max_ascii:
-                exp = chr(self.min_ascii)
-            else:
-                exp = "[%s-%s]" % (chr(self.min_ascii), chr(self.max_ascii))
-
-        elif self.type == 'union':
-            if self.fst is None:
-                exp = "(%s)?" % self.snd.print_regexp()
-            elif self.snd is None:
-                exp = "(%s)?" % self.fst.print_regexp()
-            else:
-                exp = "(%s)|(%s)" % (self.fst.print_regexp(), self.snd.print_regexp())
-
-        elif self.type == 'kleene':
-            exp = "(%s)*" % self.pattern.print_regexp()
-
-        else:
-            raise RegexpTreeException("node is of unexpected type")
-
-        return exp if self.next is None else (exp + self.next.print_regexp())
-
-
-def format_regexp(regexp):
-    """
-    Parse a regular expression and return it as a RegexpTree object
-    """
-    nodes_list = regexp_to_regexp_tree_list(regexp)
-
-    regexp_tree = nodes_list.pop(0) if nodes_list else None
-    last = regexp_tree
-
-    while nodes_list:
-        last.extend(nodes_list.pop(0))
-        last = last.next
-
-    return regexp_tree
-
-
-def regexp_to_regexp_tree_list(regexp,  pos=0):
-    """
-    Parse a regular expression and return it as a list of RegexpTree objects
-    """
-    nodes_list = []
-    regexp_length = len(regexp)
-
-    while pos < regexp_length:
-        new_nodes, new_pos = get_next_regexp_tree_token(regexp, pos=pos, nodes_list=nodes_list)
-        pos = new_pos
-        nodes_list += new_nodes
-
-    return nodes_list
-
-
-def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
-    """
-    Get the next regexp element(s) and return them as well as the new position in the string.
-    Note: This return the next token based on a single lookahead. By example "a*c" will only see a, two call will be
-          needed to see a*, thus it is needed to pass a nodes_list to be able to mutate the last element if, by example,
-          "*" or "+" are seen
-    Note2: When encountering |, the method parses the rest of the regexp since it needs the following tokens to form the
-           union
-    :param regexp: The regexp as string
-    :param pos: the position where to start
-    :param nodes_list: Previous tokens processed in the regexp, if a look-behind is necessary, the last element will be
-                       poped out, mutating the nodes_list and using the poped node to build a new node.
-    :return: The list of new RegexpTree nodes and the next position
-    """
-    # Will store the node if a single node is to be returned
-    node = None
-
-    if regexp[pos] == "\\":
-        char = ord(regexp[pos + 1])
-        node = RegexpTree('single', char, char)
-        pos += 2
-        nodes = [node]
-
-    elif regexp[pos] == "[":
-        end_pos = find_next_non_escaped_char("]", regexp, beg=pos + 1)
-
-        if end_pos:
-            node = get_regexptree_union_from_set(regexp[pos + 1:end_pos])
-            pos += end_pos - pos + 1
-        else:
-            raise RegexpParsingException("bad set syntax, expected ]")
-
-        nodes = [node]
-
-    elif regexp[pos] == "(":
-        end_pos = find_matching_closing_parenthesis(regexp, beg=pos + 1)
-        sub_regexp = regexp[pos + 1:end_pos]
-
-        node = format_regexp(sub_regexp)
-        pos += end_pos - pos + 1
-        nodes = [node]
-
-    elif regexp[pos] == "*":
-        node = RegexpTree(
-            'kleene',
-            nodes_list.pop()
-        )
-        pos += 1
-        nodes = [node]
-
-    elif regexp[pos] == "+":
-        first_occurence = nodes_list.pop()
-        kleene_component = RegexpTree('kleene', copy.deepcopy(first_occurence))
-        first_occurence.extend(kleene_component)
-        pos += 1
-        nodes = [first_occurence]
-
-    elif regexp[pos] == "?":
-        try:
-            node_to_repeat = nodes_list.pop()
-        except IndexError:
-            raise RegexpParsingException("bad syntax, '?' without token")
-
-        node = repeat_regexptree(node_to_repeat, 0, 1)
-        pos += 1
-
-        nodes = [node]
-
-    elif regexp[pos] == "{":
-        end_pos = regexp.find("}", pos+1)
-        min_max = regexp[pos + 1: end_pos].split(',')
-        length = len(min_max)
-
-        if length == 1:
-            min = max = int(min_max[0])
-
-        elif length == 2:
-            min = int(min_max[0])
-            max = int(min_max[1])
-
-        else:
-            raise RegexpParsingException("bad syntax for min-max repetition")
-
-        if 0 <= min <= max and max > 0:
-            try:
-                node_to_repeat = nodes_list.pop()
-            except IndexError:
-                raise RegexpParsingException("bad syntax, repetition without token")
-
-            node = repeat_regexptree(node_to_repeat, min, max)
-            pos += end_pos - pos + 1
-
-        else:
-            RegexpParsingException("bad interval for min-max repetition")
-
-        nodes = [node]
-
-    elif regexp[pos] == "|":
-        pos += 1
-
-        # Since we need the next token to create the union RegexpTree, we parse the rest of the regexp and later we
-        # form the union and return the whole list
-        next_nodes = regexp_to_regexp_tree_list(regexp, pos=pos)
-
-        try:
-            union_fst = nodes_list.pop()
-            union_snd = next_nodes.pop(0)
-        except IndexError:
-            raise RegexpParsingException("bad syntax, unexpected |")
-
-        # We just parsed the whole regexp, thus we are done
-        pos = len(regexp)
-
-        node = RegexpTree(
-            'union',
-            union_fst,
-            union_snd,
-        )
-
-        nodes = [node] + next_nodes
-
-    elif regexp[pos] == ".":
-        node = RegexpTree(
-            'union',
-            RegexpTree('single', 0, 9),
-            RegexpTree('single', 11, 255)
-        )
-        pos += 1
-        nodes = [node]
-
-    elif regexp[pos] == "_":
-        node = RegexpTree('single', 0, 255)
-        pos += 1
-        nodes = [node]
-
-    else:
-        char = ord(regexp[pos])
-        node = RegexpTree('single', char, char)
-        pos += 1
-        nodes = [node]
-
-    return nodes, pos
-
-
-def get_regexptree_union_from_set(inner_set):
-    """
-    Given the inner part of a set ([...]) in a regexp, return the corresponding RegexpTree object
-    """
-    if inner_set:
-        length = len(inner_set)
-        pos = 0
-        intervals = []
-        invert_set = False
-
-        if inner_set[pos] == "^":
-            invert_set = True
-            pos += 1
-
-        while pos < length:
-            if inner_set[pos] == "\\":
-                ascii = ord(inner_set[pos + 1])
-                intervals.append((ascii, ascii))
-                pos += 2
-
-            elif inner_set[pos] == "-":
-                try:
-                    previous = intervals.pop()
-                except IndexError:
-                    raise RegexpParsingException("bad syntax for range in set, unexpected -")
-
-                if previous[0] == previous[1]:
-                    min = previous[0]
-                else:
-                    raise RegexpParsingException("bad syntax for range in set, unexpected -")
-
-                if inner_set[pos + 1] == "\\":
-                    max = ord(inner_set[pos + 2])
-                    pos += 3
-
-                else:
-                    max = ord(inner_set[pos + 1])
-                    pos += 2
-
-                if min <= max:
-                    intervals.append((min, max))
-                else:
-                    raise RegexpParsingException("bad syntax for range x-y, x ascii exceeds y ascii")
-
-            else:
-                ascii = ord(inner_set[pos])
-                intervals.append((ascii, ascii))
-                pos += 1
-
-        # Sort and merge overlapping intervals
-        intervals = merge_intervals(intervals)
-
-        if invert_set:
-            intervals = inverse_intervals_list(intervals)
-
-        return reduce_interval_list_to_regexp_tree_union(intervals)
-
-    else:
-        raise RegexpParsingException("bad set, set cannot be empty")
-
-
-def find_matching_closing_parenthesis(string, beg=0):
-    """
-    Find the closing parenthesis starting at 'beg' in a string and return its position. Return None if there is none.
-    The character at position 'beg' does not have to be the opening parenthesis.
-    """
-    depth = 0
-    pos = beg
-
-    while True:
-        try:
-            char = string[pos]
-        except IndexError:
-            return None
-
-        if char == "(":
-            depth += 1
-            pos += 1
-
-        elif char == ")":
-            if depth == 0:
-                return pos
-
-            else:
-                pos += 1
-                depth -= 1
-
-        else:
-            pos += 1
-
-
-def find_next_non_escaped_char(char, string, beg=0):
-    """
-    Find the next non escaped (not preceded with \) of the given char (string even though intended to be a single char)
-    and return its position. Return None if no match
-    """
-    non_escaped_pattern = re.compile(r"(?<!\\)" + char)
-    match = non_escaped_pattern.search(string, beg)
-
-    if match:
-        return match.start()
-    else:
-        return None
-
-
-def repeat_regexptree(node, min, max):
-    """
-    Given a pattern as a RegexpTree (node), return a RegexpTree representing the pattern repeated from min to max times
-    """
-    if min > 0:
-        first = copy.deepcopy(node)
-        last = first
-        min -= 1
-        max -= 1
-
-    else:
-        last = copy.deepcopy(node)
-        first = RegexpTree(
-            'union',
-            None,
-            last
-        )
-        max -= 1
-
-    while min > 0:
-        extension = copy.deepcopy(node)
-        last.extend(extension)
-        last = extension
-        min -= 1
-        max -= 1
-
-    while max > 0:
-        extension_snd = copy.deepcopy(node)
-        extension = RegexpTree(
-            'union',
-            None,
-            extension_snd
-        )
-        last.extend(extension)
-        last = extension_snd
-
-        max -= 1
-
-    return first
-
-
-def reduce_interval_list_to_regexp_tree_union(intervals, next=None):
-    """
-    Given a list of intervals of ascii values, return the RegexpTree corresponding to the union of all those intervals
-    """
-    length = len(intervals)
-
-    if length == 0:
-        return None
-
-    if length == 1:
-        return RegexpTree(
-            'single',
-            intervals[0][0],
-            intervals[0][1],
-            next
-        )
-
-    else:
-        return RegexpTree(
-            'union',
-            RegexpTree(
-                'single',
-                intervals[0][0],
-                intervals[0][1]
-            ),
-            reduce_interval_list_to_regexp_tree_union(intervals[1:]),
-            next
-        )

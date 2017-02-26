@@ -3,13 +3,20 @@ from src.Visual import visual_lexer
 import copy
 
 rules = [
-    ("[a-z]+", "WORD"),
-    ("[A-Z][a-z]*", "NAME"),
-    ("certificat en intervention psychosociale", "DOMAINE_DE_PAM"),
-    (" ", None)
+    ("#[^#]*#", "COMMENT")
 ]
 
-buffer = "bonjour Pam comment vas tu et tu fais un certificat en intervention psychosociale"
+buffer = """
+
+#
+a
+multi-line comment
+
+
+
+#
+
+"""
 
 lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
