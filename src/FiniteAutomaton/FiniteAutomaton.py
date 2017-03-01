@@ -132,11 +132,11 @@ class NodeFiniteAutomaton(object):
         else:
             raise NodeIsNotTerminalState
 
-    def add_special_action(self, action_type, action):
+    def add_special_action(self, action_type, action, priority):
         """
         Add the given action to the special actions list
         """
-        self.special_actions.append((action_type, action))
+        self.special_actions.append((action_type, action, priority))
 
     def get_special_actions(self):
         """
@@ -158,6 +158,17 @@ class NodeFiniteAutomaton(object):
         Returns True if the state has special actions, False otherwise
         """
         return bool(self.special_actions)
+
+    def has_special_action_of_type(self, type):
+        """
+        Return True if the state has a special action of given type, else False
+        """
+
+        for action in self.get_special_actions():
+            if action[0] == type:
+                return True
+
+        return False
 
 
 class NodeNFA(NodeFiniteAutomaton):
@@ -306,6 +317,12 @@ class NodeDFA(NodeFiniteAutomaton):
         """
         self.next_states.sort(cmp=lambda x, y: IntervalOp.interval_cmp(x[0], y[0]))
 
+    def add_special_action(self, action_type, action):
+        """
+        Add the given action to the special actions list
+        """
+        self.special_actions.append((action_type, action))
+
 
 class DFA:
     def __init__(self, rules=None):
@@ -348,6 +365,13 @@ class DFA:
                         raise FiniteAutomatonError("token of special action trigger_on_contain must be a function")
 
                     special_action = "trigger_on_contain"
+
+                elif packed_rule[2] == "non_greedy":
+                    if not (callable(token) or isinstance(token, str)):
+                        raise FiniteAutomatonError(
+                            "token of special action non_greedy must be a function or a string")
+
+                    special_action = "non_greedy"
 
                 else:
                     raise FiniteAutomatonError("special action of rule (third parameter) is unrecognized")
@@ -461,9 +485,13 @@ class DFA:
 
             elif special_action == "trigger_on_contain":
                 action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule, is_real_state=False)
-                action_node.add_special_action("trigger_on_contain", token)
+                action_node.add_special_action("trigger_on_contain", token, priority=current_rule_priority)
 
                 totally_connected_states.append(action_start)
+
+            elif special_action == "non_greedy":
+                action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule, is_real_state=True)
+                action_node.add_special_action("non_greedy", token, priority=current_rule_priority)
 
             current_rule_priority += 1
 
@@ -622,38 +650,49 @@ class DFA:
                                                  'parents': {lookout: set() for lookout in alphabet}
                                                  }
 
+                # A node with a non_greedy special action will immediately return its token and never transition
+                # Thus we interrupt the formation of transitions if any such special action is found
+                # Setting the non greedy returned token is done in the next step 'Mark the terminal nodes'
+                is_non_greedy = any(nodes_as_dict[id].has_special_action_of_type('non_greedy') for id in dfa_node)
+
                 for lookout in alphabet:
 
-                    epsilon_star_states = set()
+                    # If the rule is non-greedy, we want to interrupt, thus any thing raises an error
+                    if is_non_greedy:
+                        dfa_nodes_table[dfa_node]['transitions'][lookout] = error_node_id
 
-                    for nfa_node_id in dfa_node:
+                    else:
 
-                        nfa_node = nodes_as_dict[nfa_node_id]
+                        epsilon_star_states = set()
 
-                        for state in nfa_node.get_transition_states_for_interval(lookout):
-                            epsilon_star_group = state.get_epsilon_star_group()
-                            epsilon_star_states |= node_list_to_set_of_id(epsilon_star_group)
+                        for nfa_node_id in dfa_node:
 
-                    new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else error_node_id
+                            nfa_node = nodes_as_dict[nfa_node_id]
 
-                    new_dfa_node_is_real_state = any([nodes_as_dict[id].is_real_state for id in new_dfa_node])
+                            for state in nfa_node.get_transition_states_for_interval(lookout):
+                                epsilon_star_group = state.get_epsilon_star_group()
+                                epsilon_star_states |= node_list_to_set_of_id(epsilon_star_group)
 
-                    if new_dfa_node_is_real_state or new_dfa_node is error_node_id:
+                        new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else error_node_id
 
-                        dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
+                        new_dfa_node_is_real_state = any([nodes_as_dict[id].is_real_state for id in new_dfa_node])
 
-                        if new_dfa_node not in dfa_nodes_table:
-                            # This is a placeholder for now, it will be filled later
-                            dfa_nodes_table[new_dfa_node] = {'is_terminal': False,
-                                                             'terminal': None,
-                                                             'transitions': {},
-                                                             'special_actions': [],
-                                                             'parents': {lookout: set() for lookout in alphabet}}
+                        if new_dfa_node_is_real_state or new_dfa_node is error_node_id:
 
-                        dfa_nodes_table[new_dfa_node]['parents'][lookout].add(dfa_node)
+                            dfa_nodes_table[dfa_node]['transitions'][lookout] = new_dfa_node
 
-                        if new_dfa_node:
-                            dfa_nodes_queue.append(new_dfa_node)
+                            if new_dfa_node not in dfa_nodes_table:
+                                # This is a placeholder for now, it will be filled later
+                                dfa_nodes_table[new_dfa_node] = {'is_terminal': False,
+                                                                 'terminal': None,
+                                                                 'transitions': {},
+                                                                 'special_actions': [],
+                                                                 'parents': {lookout: set() for lookout in alphabet}}
+
+                            dfa_nodes_table[new_dfa_node]['parents'][lookout].add(dfa_node)
+
+                            if new_dfa_node:
+                                dfa_nodes_queue.append(new_dfa_node)
 
                 seen_nodes.add(dfa_node)
 
@@ -666,15 +705,6 @@ class DFA:
         # In this state we also recover the special actions of states. Unlike terminal instructions, a state can have
         # multiple special actions, so we keep them all
         for sub_id in dfa_nodes_table:
-            possible_terminals = [nodes_as_dict[id] for id in sub_id]
-            terminal_node = get_max_priority_terminal(possible_terminals)
-
-            # Store the terminal
-            # The use of the boolean is because None means the state is terminal but ignored, we cannot simply use
-            # 'terminal' entry to be None to indicate that the node is not a final state
-            if terminal_node:
-                dfa_nodes_table[sub_id]['is_terminal'] = True
-                dfa_nodes_table[sub_id]['terminal'] = terminal_node.get_terminal_token()
 
             # Recover the special actions
             # Multiple special actions can be triggered on a same node
@@ -687,7 +717,44 @@ class DFA:
 
             special_actions = list(special_actions)
 
+            # Sort by priority
+            special_actions = sort_special_actions_list(special_actions)
+
+            # Remove anything after a non_greedy special action, as it is shadowed
+            special_actions = truncate_special_action_list_at_non_greedy(special_actions)
+
+            # We do not store the priority once the list is sorted
+            # The NodeDFA list of special actions does not take a priority, it assumes the actions are passed in order
+            special_actions = remove_priority_from_special_actions_list(special_actions)
+
+            # Keep the non_greedy token, as it will override the terminal token of the state if it exists
+            if special_actions and special_actions[-1][0] == 'non_greedy':
+                non_greedy_action = special_actions.pop()
+                non_greedy_token = non_greedy_action[1]
+
+            else:
+                non_greedy_token = None
+
             dfa_nodes_table[sub_id]['special_actions'] = special_actions
+
+            # Add the terminal node
+            # If a non_greedy special action was found, its token is taken
+            # Otherwise we recover the token from the maximum priority token of the NFA nodes
+            if non_greedy_token:
+                dfa_nodes_table[sub_id]['is_terminal'] = True
+                dfa_nodes_table[sub_id]['terminal'] = non_greedy_token
+
+            else:
+                # Recover the terminal with maximum priority and set it as the terminal
+                possible_terminals = [nodes_as_dict[id] for id in sub_id]
+                terminal_node = get_max_priority_terminal(possible_terminals)
+
+                # Store the terminal
+                # The use of the boolean is because None means the state is terminal but ignored, we cannot simply use
+                # 'terminal' entry to be None to indicate that the node is not a final state
+                if terminal_node:
+                    dfa_nodes_table[sub_id]['is_terminal'] = True
+                    dfa_nodes_table[sub_id]['terminal'] = terminal_node.get_terminal_token()
 
         # ========================================================
         # Minimize the DFA
@@ -941,6 +1008,42 @@ def get_max_priority_terminal(nfa_nodes_list):
             best_priority = best_node.terminal_priority
 
     return best_node
+
+
+def sort_special_actions_list(sa_list):
+    """
+    Order a list of special actions (action, token, priority) in increasing order of priority, return a sorted list
+    """
+
+    return sorted(sa_list, key=lambda x: x[2])
+
+
+def remove_priority_from_special_actions_list(sa_list):
+    """
+    Remove all priority from a list of (action, token, priority) special actions, returning a list of (action, token)
+    """
+    return map(lambda sa: sa[0:2], sa_list)
+
+
+def truncate_special_action_list_at_non_greedy(sa_list):
+    """
+    Iterate through the special action list, stopping when it encounters a non_greedy special action type. Return the
+    elements seen before that point, including the non greedy special action.
+    If no non_greedy special_action is found, a copy of the list is returned
+    """
+    index = 0
+    length = len(sa_list)
+    truncated_list = []
+
+    while index < length:
+        truncated_list.append(sa_list[index])
+
+        if sa_list[index][0] == "non_greedy":
+            break
+
+        index += 1
+
+    return truncated_list
 
 
 def node_list_to_sorted_tuple_of_id(node_list):

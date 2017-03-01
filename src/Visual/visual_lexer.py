@@ -2,7 +2,7 @@ import networkx
 import matplotlib.pyplot as pyplot
 
 
-def plot_nfa(nfa):
+def plot_nfa(nfa, start=0):
 
     nodes = []
     edges = []
@@ -62,8 +62,8 @@ def plot_nfa(nfa):
 
     color_map = [colors.get(node) for node in graph.nodes()]
 
-    networkx.draw(graph, pos=hierarchy_pos(graph, 0), with_labels=True, node_color=color_map)
-    networkx.draw_networkx_edge_labels(graph, hierarchy_pos(graph, 0), edge_labels=edge_labels)
+    networkx.draw(graph, pos=hierarchy_pos(graph, start), with_labels=True, node_color=color_map)
+    networkx.draw_networkx_edge_labels(graph, hierarchy_pos(graph, start), edge_labels=edge_labels)
     pyplot.savefig("visual_lexer_nfa.png")
 
 
