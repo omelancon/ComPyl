@@ -358,6 +358,10 @@ class DFA:
 
         for packed_rule in rules:
             rule = RegExp.format_regexp(packed_rule[0])
+
+            if rule.length()[0] == 0:
+                raise FiniteAutomatonError("error with rule '%s', regexp minimum length cannot be 0" % packed_rule[0])
+
             token = packed_rule[1]
             try:
                 if packed_rule[2] == "trigger_on_contain":

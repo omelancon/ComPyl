@@ -149,6 +149,36 @@ class RegexpTree:
         """
         self.next = None
 
+    def length(self):
+        """
+        Return a tuple of int, the first element is the minimal length of the the regexp, the second is the maximal
+        length of the regexp
+        """
+        def get_length(rg):
+            # Used to handle the None
+            return rg.length() if rg else (0, 0)
+
+        if self.type == 'single':
+            min_len = max_len = 1
+
+        elif self.type == 'union':
+            left = get_length(self.fst)
+            right = get_length(self.snd)
+
+            min_len = min(left[0], right[0])
+            max_len = max(left[1], right[1])
+
+        elif self.type == 'kleene':
+            min_len = 0
+            max_len = float('inf')
+
+        else:
+            raise RegexpTreeException("Unrecognized RegExpTree type when calculating length")
+
+        next_min, next_max = get_length(self.next)
+
+        return min_len + next_min, max_len + next_max
+
     def print_regexp(self):
         """
         Return the corresponding regexp as string

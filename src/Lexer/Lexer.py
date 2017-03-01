@@ -14,10 +14,11 @@ class Token:
     Basic token built by the lexer
     """
 
-    def __init__(self, type, value, lineno=None):
+    def __init__(self, type, value, params=None, lineno=None):
         self.type = type
         self.value = value
         self.lineno = lineno
+        self.params = params
 
     def __str__(self):
         return "<Token %s line %s>" % (self.type, str(self.lineno))
@@ -115,7 +116,6 @@ class Lexer:
         if line_rule:
             self.set_line_rule(line_rule)
 
-
     def __copy__(self):
         """
         Copy the lexer, but reuse the same DFA
@@ -163,6 +163,7 @@ class Lexer:
 
     def set_line_rule(self, line_rule):
         def line_incrementer(t, v): t.increment_line()
+
         self.add_rules([
             (line_rule, None),
             (line_rule, line_incrementer, "trigger_on_contain")
@@ -261,19 +262,28 @@ class Lexer:
             controller = self.LexerController(self)
 
             try:
-                token_type = terminal_token(controller, value)
+                token_return = terminal_token(controller, value)
             except TypeError:
-                raise LexerError("Lexer rules must be string or function LexerController -> string -> string/None")
+                raise LexerError("Lexer rules must be string or function LexerController -> string -> (string/None, *)")
 
-            if isinstance(token_type, str):
-                pass
-            elif token_type is None:
+            token_type = None
+            token_params = None
+
+            if isinstance(token_return, str):
+                token_type = token_return
+            elif token_return is None:
                 ignore = True
+            elif isinstance(token_return, tuple) and isinstance(token_return[0], str):
+                token_type = token_return[0]
+                token_params = token_return[1]
             else:
-                raise LexerError("Lexer rules as functions must return string or None")
+                raise LexerError(
+                    """Lexer rules as functions must return string or None as first return value. An optional second
+                    value can be returned to be stored in the token 'params' attribute."""
+                )
 
             if not ignore:
-                token = Token(token_type, value, lineno=init_lineno)
+                token = Token(token_type, value, params=token_params, lineno=init_lineno)
 
         # Return if a non-ignored pattern was found, else continue lexing until a token is found
         return self.lex() if ignore else token

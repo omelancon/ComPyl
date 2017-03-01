@@ -2,16 +2,23 @@ from src.Lexer.Lexer import Lexer
 from src.Visual import visual_lexer
 import copy
 
+def COMMENT(t, v):
+    return "COMMENT", v
+
+def SPACE(t, v):
+    print "I have seen a space"
+
 rules = [
-    ("##_*##", "COMMENT", "non_greedy"),
-    ("##AAA##yo", "A_TOKEN"),
-    (" ", None),
-    ("foo", "FOO")
+    (r"##_*##", COMMENT, "non_greedy"),
+    (r"##AAA##yo", "A_TOKEN"),
+    (r" ", SPACE),
+    (r"foo", "FOO"),
+    ("a*b?!", "HI")
 ]
 
-buffer = """##A## foo"""
+buffer = """##ANYTHIN GOES HERE##"""
 
-lexer = Lexer(rules=rules)
+lexer = Lexer(rules=rules, params={'tokens_seen': 0})
 lexer.set_line_rule("\n")
 lexer.build()
 
