@@ -135,7 +135,6 @@ class Lexer:
         Copy the lexer, but reuse the same DFA
         """
         dup = Lexer(rules=copy.copy(self.rules),
-                    line_rule=copy.copy(self.line_rule),
                     params=copy.copy(self.params)
                     )
         dup.lineno = self.lineno

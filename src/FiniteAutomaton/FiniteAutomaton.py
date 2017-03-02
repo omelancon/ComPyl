@@ -258,8 +258,10 @@ class NodeNFA(NodeFiniteAutomaton):
             _group = set()
             save = True
 
+        _group.add(self)
+
         for node in self.get_transition_for_empty_string():
-            if node is not self:
+            if node not in _group:
                 if force_recalculate or node.epsilon_star_group is None:
                     node_group = node._calculate_epsilon_star_group(_group=_group, force_recalculate=force_recalculate)
                 else:
@@ -267,7 +269,6 @@ class NodeNFA(NodeFiniteAutomaton):
 
                 _group |= node_group
 
-        _group.add(self)
         if save:
             self.epsilon_star_group = list(_group)
 
@@ -517,7 +518,6 @@ class DFA:
         :param token: the token returned by the rule (a string or a function NodeFiniteAutomaton -> string -> string)
         :return: a tuple (first, last) where first and last are respectively the first and last nodes of the rule
         """
-
         if regexp is not None:
 
             first = nfa_start.add_empty_transition()
