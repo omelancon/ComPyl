@@ -11,12 +11,16 @@ def SPACE(t, v):
 rules = [
     (r"##_*##", COMMENT, "non_greedy"),
     (r"##AAA##yo", "A_TOKEN"),
-    (r" ", SPACE),
+    (" |\t", SPACE),
     (r"foo", "FOO"),
     ("a*b?!", "HI")
 ]
 
-buffer = """##ANYTHIN GOES HERE##"""
+buffer = """##ANYTHIN GOES
+
+
+ HERE##
+ \tfoo"""
 
 lexer = Lexer(rules=rules, params={'tokens_seen': 0})
 lexer.set_line_rule("\n")

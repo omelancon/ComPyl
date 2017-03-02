@@ -39,7 +39,9 @@ class Lexer:
     expressions and second element is a string/function/None.
     If a rule is given as string, the Lexer returns a token with the string as token type.
     If a rule is given as function, the Lexer calls the function with a LexerController and matched pattern as arguments
-    and takes return value as token type. See LexerController subclass to see what the function will have access to.
+    and takes return value as token type. Optionally, the function can return a second value which is stored in the
+    'params' attribute of the Token object that will be created.
+    See LexerController subclass to see what the function will have access to.
     If None is given as rule, the Lexer interprets the regular expression as a pattern to be ignored (by example for
     spaces, comments, etc.)
 
@@ -47,8 +49,20 @@ class Lexer:
     to do line incrementation. Lexer has a line_rule attribute which can be set with Lexer.set_line_rule, this will
     automatically increment line number when the pattern is encountered. In particular, this will increment Lexer.lineno
     even if the pattern is encountered inside another pattern (a multi-line comments for say). Lexer.set_line_rule,
-    takes a tuple (regex, rule) as argument. Doing so will also pre-compute regexp intersections in later versions to
-    make this option even more efficient.
+    takes a tuple (regex, rule) as argument.
+
+    Rules can also be passed with a third parameter, (regexp, rule, action). Action is a string that can take the
+    following values:
+    'non_greedy': when the 'non_greedy' tag is added to a rule, the lexer will match the regexp non greedily. By example
+        given the buffer "\.. a comment ..\ some more code", the rule "\.._*..\" would return a syntax error since the
+        _* would consume greedily. Although if the 'non_greedy' tag is added to the rule, then the comment is matched
+
+    'trigger_on_contain': when this tag is added, the second parameter of the rule is expected to be a function.
+        Whenever the given regexp is found nested inside another pattern, the function will be called without creating
+        a token. This can be used to count certain patterns nested inside others (by example, this is what the function
+        'set_line_rule' uses to be able to count linebreaks in, say, multi-line comment). CAVEAT: be aware that
+        trigger_on_contain will be triggered even when it finds intersecting patterns, thus the regexp '\n+' used to
+        increment line with 'trigger_on_contain' will increment multiple times for a given linebreak.
 
     Lexer.read appends a string to the current buffer
 
