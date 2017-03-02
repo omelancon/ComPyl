@@ -53,6 +53,7 @@ class Lexer:
 
     Rules can also be passed with a third parameter, (regexp, rule, action). Action is a string that can take the
     following values:
+
     'non_greedy': when the 'non_greedy' tag is added to a rule, the lexer will match the regexp non greedily. By example
         given the buffer "\.. a comment ..\ some more code", the rule "\.._*..\" would return a syntax error since the
         _* would consume greedily. Although if the 'non_greedy' tag is added to the rule, then the comment is matched
@@ -60,9 +61,13 @@ class Lexer:
     'trigger_on_contain': when this tag is added, the second parameter of the rule is expected to be a function.
         Whenever the given regexp is found nested inside another pattern, the function will be called without creating
         a token. This can be used to count certain patterns nested inside others (by example, this is what the function
-        'set_line_rule' uses to be able to count linebreaks in, say, multi-line comment). CAVEAT: be aware that
-        trigger_on_contain will be triggered even when it finds intersecting patterns, thus the regexp '\n+' used to
-        increment line with 'trigger_on_contain' will increment multiple times for a given linebreak.
+        'set_line_rule' uses to be able to count linebreaks in, say, multi-line comment).
+        CAVEAT: be aware that trigger_on_contain will be triggered even if the contained patterns intersect. By example,
+        if the rule 'aba' was hypothetically used for line incrementation, then the lineno would be incremented twice on
+        'ababa', provided that it is inside an accepted pattern. Although, the rule cannot be triggered multiple time
+        on a same character, thus '\n+' will not trigger five times on '\n\n\n' but only three times as desired.
+        Overall, it is simply better to use 'trigger_on_contain' for simple rules, not using *, + or ?, and maybe even
+        consisting of a single character.
 
     Lexer.read appends a string to the current buffer
 

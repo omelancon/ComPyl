@@ -5,25 +5,20 @@ import copy
 def COMMENT(t, v):
     return "COMMENT", v
 
-def SPACE(t, v):
-    print "I have seen a space"
-
 rules = [
-    ("##_*##", COMMENT, "non_greedy")
+    ("##_*##", COMMENT, "non_greedy"),
+    (" ", "SPACE"),
+    ("a", "A")
 ]
 
-buffer = """##ANYTHIN GOES##
-####
-####
-####
+buffer = """##
 
 
 
-
-####"""
+##aaaaaa """
 
 lexer = Lexer(rules=rules, params={'tokens_seen': 0})
-lexer.set_line_rule("\n+")
+lexer.set_line_rule("aaa")
 lexer.build()
 
 visual_lexer.plot_dfa(lexer.dfa.start)
