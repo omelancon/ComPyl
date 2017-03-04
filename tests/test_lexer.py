@@ -2,8 +2,12 @@ from src.Lexer.Lexer import Lexer
 from src.Visual import visual_lexer
 import copy
 
+def DISPLAY_STATE(t):
+    from pprint import pprint
+    pprint(t.params)
+
 def COMMENT(t, v):
-    print("A one-line comment")
+    t.params["comments"] += 1
 
 rules = [
     (r"for", "FOR"),
@@ -14,8 +18,7 @@ rules = [
     (r"\(", "L_PAR"),
     (r"\)", "R_PAR"),
     (r":", "SEMICOLON"),
-    (r"/-.*-/", COMMENT, "non_greedy"),
-    (r"/--_*--/", None, "non_greedy"),
+    (r"/--_*--/", COMMENT, "non_greedy"),
     (r"\"[a-zA-Z0-9]*\"", "STRING"),
     (r"[a-zA-Z]+", "ID"),
     (r"[1-9][0-9]*", "INT"),
@@ -26,15 +29,19 @@ rules = [
     (r"[ \t]+", None)
 ]
 
+terminal_actions = [
+    DISPLAY_STATE
+]
+
 buffer = """
 for i = 1 to 20:
     x = i
     if x == i:
-        /- We add a comment here -/
+        /-- We add a comment here --/
         print x + 2
     """
 
-lexer = Lexer(rules=rules)
+lexer = Lexer(rules=rules, terminal_actions=terminal_actions, params={'comments': 0})
 lexer.set_line_rule("\n")
 lexer.build()
 

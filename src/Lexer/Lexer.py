@@ -106,7 +106,7 @@ class Lexer:
             self.increment_line = increment_line
             self.increment_pos = increment_pos
 
-    def __init__(self, buffer=None, rules=None, line_rule=None, params=None):
+    def __init__(self, buffer=None, rules=None, line_rule=None, terminal_actions=None, params=None):
 
         # Line number of the pointer
         self.lineno = 1
@@ -119,6 +119,9 @@ class Lexer:
 
         # List of rules
         self.rules = []
+
+        # List of method called everytime a token is returned
+        self.terminal_actions = []
 
         # The Non-deterministic Finite Automaton that can later be optionally be saved
         self.nfa = None
@@ -135,12 +138,16 @@ class Lexer:
         if line_rule:
             self.set_line_rule(line_rule)
 
+        if terminal_actions:
+            self.add_terminal_actions(terminal_actions)
+
     def __copy__(self):
         """
         Copy the lexer, but reuse the same DFA
         """
         dup = Lexer(rules=copy.copy(self.rules),
-                    params=copy.copy(self.params)
+                    params=copy.copy(self.params),
+                    terminal_actions=copy.copy(self.terminal_actions)
                     )
         dup.lineno = self.lineno
         dup.pos = self.pos
@@ -157,7 +164,8 @@ class Lexer:
         Copy the lexer with its rules and DFA
         """
         dup = Lexer(rules=copy.copy(self.rules),
-                    params=copy.copy(self.params)
+                    params=copy.copy(self.params),
+                    terminal_actions=copy.copy(self.terminal_actions)
                     )
         dup.lineno = self.lineno
         dup.pos = self.pos
@@ -190,6 +198,10 @@ class Lexer:
     def add_rules(self, rules):
         for rule in rules:
             self.rules.append(rule)
+
+    def add_terminal_actions(self, actions):
+        for action in actions:
+            self.terminal_actions.append(action)
 
     def build(self):
         self.dfa = DFA(self.rules)
@@ -304,4 +316,12 @@ class Lexer:
                 token = Token(token_type, value, params=token_params, lineno=init_lineno)
 
         # Return if a non-ignored pattern was found, else continue lexing until a token is found
-        return self.lex() if ignore else token
+        if ignore:
+            return self.lex()
+        else:
+            # Before returning a token, we trigger all terminal actions
+            for action in self.terminal_actions:
+                controller = self.LexerController(self)
+                action(controller)
+
+            return token
