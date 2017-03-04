@@ -3,7 +3,7 @@ from src.Visual import visual_lexer
 import copy
 
 def COMMENT(t, v):
-    print "A one-line comment"
+    print("A one-line comment")
 
 rules = [
     ("for", "FOR"),
@@ -52,4 +52,4 @@ tk = True
 
 while tk:
     tk = loaded.lex()
-    print tk
+    print(tk)

@@ -1,3 +1,5 @@
+from functools import cmp_to_key
+
 # ======================================================================================================================
 # Set operations on interval
 # ======================================================================================================================
@@ -41,7 +43,7 @@ def binary_search_on_transitions(target, transitions):
     right = len(transitions) - 1
 
     while left <= right:
-        index = (left + right) / 2
+        index = (left + right) // 2
         min, max = transitions[index][0]
 
         if target < min:
@@ -103,7 +105,7 @@ def merge_intervals(intervals):
     if not intervals:
         return []
 
-    intervals.sort(cmp=interval_cmp)
+    intervals.sort(key=cmp_to_key(interval_cmp))
 
     merged_intervals = []
     min = max = intervals[0][0]
@@ -186,7 +188,7 @@ def get_minimal_covering_intervals(intervals):
         if len(intervals) == 1:
             return intervals
 
-        intervals.sort(cmp=interval_cmp)
+        intervals.sort(key=cmp_to_key(interval_cmp))
 
         left = intervals[0][0]
         right = intervals[0][1]

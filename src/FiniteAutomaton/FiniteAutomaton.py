@@ -1,5 +1,6 @@
 import copy
 from itertools import count
+from functools import cmp_to_key
 
 import src.RegExp.IntervalOperations as IntervalOp
 import src.RegExp.RegExp as RegExp
@@ -316,7 +317,7 @@ class NodeDFA(NodeFiniteAutomaton):
         """
         Sort self.next_states by lookouts so they can be easily searched afterward
         """
-        self.next_states.sort(cmp=lambda x, y: IntervalOp.interval_cmp(x[0], y[0]))
+        self.next_states.sort(key=cmp_to_key(lambda x, y: IntervalOp.interval_cmp(x[0], y[0])))
 
     def add_special_action(self, action_type, action):
         """
@@ -460,14 +461,14 @@ class DFA:
         """
 
         def rec_relabel(state, counter, relabeled):
-            state.id = counter.next()
+            state.id = next(counter)
 
             for _, child_state in state.next_states:
                 if child_state not in relabeled:
                     relabeled.add(child_state)
                     rec_relabel(child_state, counter, relabeled)
 
-        counter = count(count_from)
+        counter = count(start=1, step=1)
 
         rec_relabel(start, counter, set())
 
@@ -738,6 +739,8 @@ class DFA:
             # We do not store the priority once the list is sorted
             # The NodeDFA list of special actions does not take a priority, it assumes the actions are passed in order
             special_actions = remove_priority_from_special_actions_list(special_actions)
+
+            special_actions = list(special_actions)
 
             # Keep the non_greedy token, as it will override the terminal token of the state if it exists
             if special_actions and special_actions[-1][0] == DFA.NON_GREEDY:
