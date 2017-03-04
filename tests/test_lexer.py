@@ -32,7 +32,6 @@ for i = 1 to 20:
     if x == i:
         /- We add a comment here -/
         print x + 2
-
     """
 
 lexer = Lexer(rules=rules)

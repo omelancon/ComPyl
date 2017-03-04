@@ -365,7 +365,7 @@ class DFA:
         for packed_rule in rules:
             rule = RegExp.format_regexp(packed_rule[0])
 
-            if rule.length()[0] == 0:
+            if rule is None or rule.length()[0] == 0:
                 raise FiniteAutomatonError("error with rule '%s', regexp minimum length cannot be 0" % packed_rule[0])
 
             token = packed_rule[1]
@@ -662,7 +662,7 @@ class DFA:
                 # A node with a non_greedy special action will immediately return its token and never transition
                 # Thus we interrupt the formation of transitions if any such special action is found
                 # Setting the non greedy returned token is done in the next step 'Mark the terminal nodes'
-                is_non_greedy = any(nodes_as_dict[id].has_special_action_of_type('non_greedy') for id in dfa_node)
+                is_non_greedy = any(nodes_as_dict[id].has_special_action_of_type(DFA.NON_GREEDY) for id in dfa_node)
 
                 for lookout in alphabet:
 
