@@ -326,6 +326,11 @@ class NodeDFA(NodeFiniteAutomaton):
 
 
 class DFA:
+
+    # Ids for the special actions as we do not want to store them as trings in the DFA
+    TRIGGER_ON_CONTAIN = 1
+    NON_GREEDY = 2
+
     def __init__(self, rules=None):
         self.start = None
         self.current_state = None
@@ -369,14 +374,14 @@ class DFA:
                     if not callable(token):
                         raise FiniteAutomatonError("token of special action trigger_on_contain must be a function")
 
-                    special_action = "trigger_on_contain"
+                    special_action = self.TRIGGER_ON_CONTAIN
 
                 elif packed_rule[2] == "non_greedy":
                     if not (callable(token) or isinstance(token, str) or token is None):
                         raise FiniteAutomatonError(
                             "token of special action non_greedy must be a function, a string or None")
 
-                    special_action = "non_greedy"
+                    special_action = self.NON_GREEDY
 
                 else:
                     raise FiniteAutomatonError("special action of rule (third parameter) is unrecognized")
@@ -488,15 +493,15 @@ class DFA:
                 _, terminal_node = DFA.add_rule_to_nfa(nfa_start, rule)
                 terminal_node.set_terminal_token(token, priority=current_rule_priority)
 
-            elif special_action == "trigger_on_contain":
+            elif special_action == DFA.TRIGGER_ON_CONTAIN:
                 action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule, is_real_state=False)
-                action_node.add_special_action("trigger_on_contain", token, priority=current_rule_priority)
+                action_node.add_special_action(special_action, token, priority=current_rule_priority)
 
                 totally_connected_states.append(action_start)
 
-            elif special_action == "non_greedy":
+            elif special_action == DFA.NON_GREEDY:
                 action_start, action_node = DFA.add_rule_to_nfa(nfa_start, rule, is_real_state=True)
-                action_node.add_special_action("non_greedy", token, priority=current_rule_priority)
+                action_node.add_special_action(special_action, token, priority=current_rule_priority)
 
             current_rule_priority += 1
 
@@ -591,9 +596,6 @@ class DFA:
         6) Translate the table to a graph structure
         7) Return the starting node
         """
-        # For debug
-        DFA.relabel_states_of_dfa(nfa)
-
         # ========================================================
         # Recover all nodes and possible lookouts found in the NFA
         # ========================================================
@@ -738,7 +740,7 @@ class DFA:
             special_actions = remove_priority_from_special_actions_list(special_actions)
 
             # Keep the non_greedy token, as it will override the terminal token of the state if it exists
-            if special_actions and special_actions[-1][0] == 'non_greedy':
+            if special_actions and special_actions[-1][0] == DFA.NON_GREEDY:
                 non_greedy_action = special_actions.pop()
                 non_greedy_token = non_greedy_action[1]
                 non_greedy_token_exists = True
@@ -1063,7 +1065,7 @@ def truncate_special_action_list_at_non_greedy(sa_list):
     while index < length:
         truncated_list.append(sa_list[index])
 
-        if sa_list[index][0] == "non_greedy":
+        if sa_list[index][0] == DFA.NON_GREEDY:
             break
 
         index += 1

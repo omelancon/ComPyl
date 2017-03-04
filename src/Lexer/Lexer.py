@@ -242,7 +242,7 @@ class Lexer:
 
                 for action_type, action in special_actions:
 
-                    if action_type == "trigger_on_contain":
+                    if action_type == DFA.TRIGGER_ON_CONTAIN:
                         controller = self.LexerController(self)
                         value = self.buffer[init_pos:self.pos]
                         action(controller, value)

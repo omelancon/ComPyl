@@ -3,7 +3,7 @@ from src.Visual import visual_lexer
 import copy
 
 def COMMENT(t, v):
-    return "COMMENT", v
+    print "A one-line comment"
 
 rules = [
     ("for", "FOR"),
@@ -14,6 +14,7 @@ rules = [
     ("\(", "L_PAR"),
     ("\)", "R_PAR"),
     (":", "SEMICOLON"),
+    ("/-.*-/", COMMENT, "non_greedy"),
     ("/--_*--/", None, "non_greedy"),
     ("\"[a-zA-Z0-9]*\"", "STRING"),
     ("[a-zA-Z]+", "ID"),
@@ -29,7 +30,7 @@ buffer = """
 for i = 1 to 20:
     x = i
     if x == i:
-        /-- We add a comment here --/
+        /- We add a comment here -/
         print x + 2
 
     """
