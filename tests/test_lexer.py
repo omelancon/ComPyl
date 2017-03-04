@@ -6,19 +6,36 @@ def COMMENT(t, v):
     return "COMMENT", v
 
 rules = [
-    ("##_*##", COMMENT, "non_greedy"),
-    (" ", "SPACE"),
-    ("a", "A")
+    ("for", "FOR"),
+    ("if", "IF"),
+    ("else", "ELSE"),
+    ("print", "PRINT"),
+    ("to", "TO"),
+    ("\(", "L_PAR"),
+    ("\)", "R_PAR"),
+    (":", "SEMICOLON"),
+    ("/--_*--/", None, "non_greedy"),
+    ("\"[a-zA-Z0-9]*\"", "STRING"),
+    ("[a-zA-Z]+", "ID"),
+    ("[1-9][0-9]*", "INT"),
+    ("\+", "PLUS"),
+    ("-", "MINUS"),
+    ("=", "ASSIGN"),
+    ("==", "EQ"),
+    ("[ \t]", None)
 ]
 
-buffer = """##
+buffer = """
+for i = 1 to 20:
+    x = i
+    if x == i:
+        /-- We add a comment here --/
+        print x + 2
 
+    """
 
-
-##aaaaaa """
-
-lexer = Lexer(rules=rules, params={'tokens_seen': 0})
-lexer.set_line_rule("aaa")
+lexer = Lexer(rules=rules)
+lexer.set_line_rule("\n")
 lexer.build()
 
 visual_lexer.plot_dfa(lexer.dfa.start)

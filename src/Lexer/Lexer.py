@@ -65,13 +65,13 @@ class Lexer:
         CAVEAT: be aware that trigger_on_contain will be triggered even if the contained patterns intersect. By example,
         if the rule 'aba' was hypothetically used for line incrementation, then the lineno would be incremented twice on
         'ababa', provided that it is inside an accepted pattern. Although, the rule cannot be triggered multiple time
-        on a same character, thus '\n+' will not trigger five times on '\n\n\n' but only three times as desired.
+        on a same character, thus '\n+' will not trigger five times on '\n\n\n' but only three times.
         Overall, it is simply better to use 'trigger_on_contain' for simple rules, not using *, + or ?, and maybe even
         consisting of a single character.
 
     Lexer.read appends a string to the current buffer
 
-    Lexer.drop_old_buffer drops the part of the buffer read already
+    Lexer.drop_old_buffer drops the part of the buffer before 'pos'
 
     Lexer.lex reads the Lexer.buffer and returns a Token or None if it reached the end of the buffer
     """

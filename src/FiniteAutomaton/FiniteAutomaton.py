@@ -372,9 +372,9 @@ class DFA:
                     special_action = "trigger_on_contain"
 
                 elif packed_rule[2] == "non_greedy":
-                    if not (callable(token) or isinstance(token, str)):
+                    if not (callable(token) or isinstance(token, str) or token is None):
                         raise FiniteAutomatonError(
-                            "token of special action non_greedy must be a function or a string")
+                            "token of special action non_greedy must be a function, a string or None")
 
                     special_action = "non_greedy"
 
@@ -591,6 +591,9 @@ class DFA:
         6) Translate the table to a graph structure
         7) Return the starting node
         """
+        # For debug
+        DFA.relabel_states_of_dfa(nfa)
+
         # ========================================================
         # Recover all nodes and possible lookouts found in the NFA
         # ========================================================
@@ -677,7 +680,10 @@ class DFA:
                                 epsilon_star_group = state.get_epsilon_star_group()
                                 epsilon_star_states |= node_list_to_set_of_id(epsilon_star_group)
 
-                        new_dfa_node = tuple(epsilon_star_states) if epsilon_star_states else error_node_id
+                        if epsilon_star_states:
+                            new_dfa_node = tuple(sorted(epsilon_star_states))
+                        else:
+                            new_dfa_node = error_node_id
 
                         new_dfa_node_is_real_state = any([nodes_as_dict[id].is_real_state for id in new_dfa_node])
 
@@ -735,16 +741,18 @@ class DFA:
             if special_actions and special_actions[-1][0] == 'non_greedy':
                 non_greedy_action = special_actions.pop()
                 non_greedy_token = non_greedy_action[1]
+                non_greedy_token_exists = True
 
             else:
                 non_greedy_token = None
+                non_greedy_token_exists = False
 
             dfa_nodes_table[sub_id]['special_actions'] = special_actions
 
             # Add the terminal node
             # If a non_greedy special action was found, its token is taken
             # Otherwise we recover the token from the maximum priority token of the NFA nodes
-            if non_greedy_token:
+            if non_greedy_token_exists:
                 dfa_nodes_table[sub_id]['is_terminal'] = True
                 dfa_nodes_table[sub_id]['terminal'] = non_greedy_token
 
@@ -857,10 +865,14 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
     # distinguishable
     active_states_as_dict = {}
 
+    # Definition of what we consider an active state
+    def is_active_state(state):
+        return state['is_terminal'] or state['special_actions']
+
     for id in dfa_nodes_table:
         state = dfa_nodes_table[id]
 
-        if state['is_terminal'] or state['special_actions']:
+        if is_active_state(state):
             # Action id is an hashable representation of the actions the state can lead to (terminal token an special
             # actions together. In particular, two states with the same returning behavior will have the same action_id
             action_id = (state['is_terminal'], state['terminal'], frozenset(state['special_actions']))
@@ -873,7 +885,7 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
 
     active_states = {frozenset(states) for _, states in active_states_as_dict.items()}
     inactive_states = frozenset([id for id in dfa_nodes_table if
-                                 not (dfa_nodes_table[id]['is_terminal'] or dfa_nodes_table[id]['special_actions'])])
+                                 not is_active_state(dfa_nodes_table[id])])
 
     partition = {inactive_states}
     partition |= active_states
@@ -927,7 +939,16 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
             mapping[state] = states
 
     # Remove the error node, represented by an empty tuple
-    partition.remove(frozenset([error_state_id]))
+    # What is done here is we look for the set of states in the partition that contains the error state, all the states
+    # in this state behave like the error state and are thus an error. As for the early versions, it should never happen
+    # that the error_state_id '()' is in a set with other states, but this solution has been implemented as as fix for
+    # a bug that lied somewhere else, but was kept since it may actually be the correct generalization we want later
+    for error_states in partition:
+        if error_state_id in error_states:
+            break
+    else:
+        raise FiniteAutomatonError("lost error state in Hopcroft's algorithm")
+    partition.remove(error_states)
 
     minimal_dfa = {}
     for states in partition:
@@ -935,7 +956,7 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
 
         for state in states:
             for lookout, target in dfa_nodes_table[state]['transitions'].items():
-                if target == error_state_id or lookout in transitions:
+                if target in error_states or lookout in transitions:
                     continue
                 else:
                     transitions[lookout] = mapping[target]
