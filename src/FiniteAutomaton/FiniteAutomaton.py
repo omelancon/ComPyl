@@ -189,10 +189,10 @@ class NodeNFA(NodeFiniteAutomaton):
         Extend the 'set_terminal_token' method of NodeFiniteAutomaton to set a terminal token and additionally set
         the priority of the terminal (which is required for the NFA -> DFA step).
         """
-        super(NodeNFA, self).set_terminal_token(terminal_token)
-
         if not self.terminal_exists():
             self.terminal_priority = priority
+
+        super(NodeNFA, self).set_terminal_token(terminal_token)
 
     def make_real_state(self):
         self.is_real_state = True
@@ -456,7 +456,7 @@ class DFA:
     @staticmethod
     def relabel_states_of_dfa(start, count_from=0):
         """
-        Relabel the states' ids of the DFA, strating at 'start'.
+        Relabel the states' ids of the DFA, starting at 'start'.
         """
 
         def rec_relabel(state, counter, relabeled):
@@ -1030,6 +1030,7 @@ def get_max_priority_terminal(nfa_nodes_list):
     best_node = None
 
     for node in nfa_nodes_list:
+
         if node.terminal_exists() and node.terminal_priority < best_priority:
             best_node = node
             best_priority = best_node.terminal_priority

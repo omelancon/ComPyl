@@ -23,7 +23,7 @@ rules = [
     ("-", "MINUS"),
     ("=", "ASSIGN"),
     ("==", "EQ"),
-    ("[ \t]", None)
+    ("[ \t]+", None)
 ]
 
 buffer = """
@@ -38,7 +38,7 @@ lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
 lexer.build()
 
-visual_lexer.plot_dfa(lexer.dfa.start)
+# visual_lexer.plot_dfa(lexer.dfa.start)
 
 lexer.read(buffer)
 
