@@ -6,24 +6,24 @@ def COMMENT(t, v):
     print("A one-line comment")
 
 rules = [
-    ("for", "FOR"),
-    ("if", "IF"),
-    ("else", "ELSE"),
-    ("print", "PRINT"),
-    ("to", "TO"),
-    ("\(", "L_PAR"),
-    ("\)", "R_PAR"),
-    (":", "SEMICOLON"),
-    ("/-.*-/", COMMENT, "non_greedy"),
-    ("/--_*--/", None, "non_greedy"),
-    ("\"[a-zA-Z0-9]*\"", "STRING"),
-    ("[a-zA-Z]+", "ID"),
-    ("[1-9][0-9]*", "INT"),
-    ("\+", "PLUS"),
-    ("-", "MINUS"),
-    ("=", "ASSIGN"),
-    ("==", "EQ"),
-    ("[ \t]+", None)
+    (r"for", "FOR"),
+    (r"if", "IF"),
+    (r"else", "ELSE"),
+    (r"print", "PRINT"),
+    (r"to", "TO"),
+    (r"\(", "L_PAR"),
+    (r"\)", "R_PAR"),
+    (r":", "SEMICOLON"),
+    (r"/-.*-/", COMMENT, "non_greedy"),
+    (r"/--_*--/", None, "non_greedy"),
+    (r"\"[a-zA-Z0-9]*\"", "STRING"),
+    (r"[a-zA-Z]+", "ID"),
+    (r"[1-9][0-9]*", "INT"),
+    (r"\053", "PLUS"),
+    (r"\x2d", "MINUS"),
+    (r"=", "ASSIGN"),
+    (r"==", "EQ"),
+    (r"[ \t]+", None)
 ]
 
 buffer = """
@@ -38,7 +38,7 @@ lexer = Lexer(rules=rules)
 lexer.set_line_rule("\n")
 lexer.build()
 
-# visual_lexer.plot_dfa(lexer.dfa.start)
+visual_lexer.plot_dfa(lexer.dfa.start)
 
 lexer.read(buffer)
 

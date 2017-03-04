@@ -255,9 +255,8 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
     node = None
 
     if regexp[pos] == "\\":
-        char = ord(regexp[pos + 1])
-        node = RegexpTree('single', char, char)
-        pos += 2
+        ascii, pos = get_escaped_ascii(regexp, pos + 1)
+        node = RegexpTree('single', ascii, ascii)
         nodes = [node]
 
     elif regexp[pos] == "[":
@@ -381,6 +380,44 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
     return nodes, pos
 
 
+def get_escaped_ascii(regexp, pos):
+    """
+    Return the ascii value of an escaped char, i.e. preceded by a \
+    In particular, regexp should be build using raw strings, thus we need to implement the python built-in escape
+    sequences
+    """
+    escape = {"a": "\a",
+              "b": "\b",
+              "f": "\f",
+              "n": "\n",
+              "r": "\r",
+              "t": "\t",
+              "v": "\v"
+              }
+
+    char = regexp[pos]
+
+    if char in escape:
+        return ord(escape[char]), pos + 1
+
+    elif char == "x":
+        # Hexadecimal
+        try:
+            return int(regexp[pos + 1: pos + 3], 16), pos + 3
+        except (ValueError, IndexError):
+            raise RegexpParsingException("bad hexadecimal syntax, must be of format \\xhh")
+
+    elif char == "0":
+        # Octal, anything else than 0 is not detected since ascii values are bounded at 255
+        try:
+            return int(regexp[pos + 1: pos + 3], 8), pos + 3
+        except (ValueError, IndexError):
+            raise RegexpParsingException("bad octal syntax, must be of format \\0oo")
+
+    else:
+        return ord(char), pos + 1
+
+
 def get_regexptree_union_from_set(inner_set):
     """
     Given the inner part of a set ([...]) in a regexp, return the corresponding RegexpTree object
@@ -397,9 +434,8 @@ def get_regexptree_union_from_set(inner_set):
 
         while pos < length:
             if inner_set[pos] == "\\":
-                ascii = ord(inner_set[pos + 1])
+                ascii, pos = get_escaped_ascii(inner_set, pos)
                 intervals.append((ascii, ascii))
-                pos += 2
 
             elif inner_set[pos] == "-":
                 try:
