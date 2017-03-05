@@ -4,7 +4,6 @@ import copy
 
 
 def vowel_counter(t):
-    value = t.buffer[t.init_pos:t.pos]
     t.params['vowels'] += 1
 
 
@@ -13,7 +12,6 @@ def reset_lexer_params(t):
 
 
 def WORD(t):
-    value = t.buffer[t.init_pos:t.pos + 1]
     return "WORD", {'vowels': t.params['vowels']}
 
 rules = [

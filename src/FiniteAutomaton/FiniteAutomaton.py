@@ -468,7 +468,7 @@ class DFA:
                     relabeled.add(child_state)
                     rec_relabel(child_state, counter, relabeled)
 
-        counter = count(start=1, step=1)
+        counter = count(start=count_from, step=1)
 
         rec_relabel(start, counter, set())
 
