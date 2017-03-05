@@ -154,9 +154,9 @@ class Lexer:
         Copy the lexer, but reuse the same DFA
         """
         dup = Lexer(rules=copy.copy(self.rules),
-                    params=copy.copy(self.params),
-                    terminal_actions=copy.copy(self.terminal_actions)
+                    params=copy.copy(self.params)
                     )
+        dup.terminal_actions = copy.copy(self.terminal_actions)
         dup.lineno = self.lineno
         dup.pos = self.pos
         dup.buffer = self.buffer
@@ -172,9 +172,9 @@ class Lexer:
         Copy the lexer with its rules and DFA
         """
         dup = Lexer(rules=copy.copy(self.rules),
-                    params=copy.copy(self.params),
-                    terminal_actions=copy.copy(self.terminal_actions)
+                    params=copy.copy(self.params)
                     )
+        dup.terminal_actions = copy.copy(self.terminal_actions)
         dup.lineno = self.lineno
         dup.pos = self.pos
         dup.buffer = self.buffer
@@ -209,7 +209,33 @@ class Lexer:
 
     def add_terminal_actions(self, actions):
         for action in actions:
-            self.terminal_actions.append(action)
+            if isinstance(action, tuple) and len(action) == 2:
+                action_fn = action[0]
+                action_trigger = action[1]
+
+                if action_trigger == "always":
+                    trigger_code = 0
+
+                elif action_trigger == "only_ignored":
+                    trigger_code = -1
+
+                elif action_trigger == "only_tokens":
+                    trigger_code = 1
+
+                else:
+                    raise LexerError(
+                        "terminal actions as tuple can only have options 'always', 'only_ignored' or 'only_tokens'"
+                    )
+            else:
+                action_fn = action
+                trigger_code = 0
+
+            if callable(action_fn):
+                self.terminal_actions.append((action_fn, trigger_code))
+
+            else:
+                raise LexerError("""terminal action must be of type (function, string) tuple,
+                    the string can take values 'always', 'only_ignored' or 'only_tokens'""")
 
     def build(self):
         self.dfa = DFA(self.rules)
@@ -341,12 +367,13 @@ class Lexer:
                               params=token_params,
                               lineno=init_lineno)
 
-        # Return if a non-ignored pattern was found, else continue lexing until a token is found
-        if ignore:
-            return self.lex()
-        else:
-            # Before returning a token, we trigger all terminal actions
-            for action in self.terminal_actions:
+        # Before returning a token, we trigger all terminal actions
+        # Recall that the trigger code of the terminal action has the following meaning:
+        # -1 -> trigger only on ignored match
+        #  1 -> trigger only on match returning token
+        #  0 -> always trigger the action the there is a match
+        for action, trigger_code in self.terminal_actions:
+            if trigger_code == 0:
                 controller = self.LexerController(
                     self,
                     init_lineno,
@@ -354,4 +381,25 @@ class Lexer:
                 )
                 action(controller)
 
+            elif trigger_code == -1 and ignore:
+                controller = self.LexerController(
+                    self,
+                    init_lineno,
+                    init_pos
+                )
+                action(controller)
+
+            elif trigger_code == 1 and not ignore:
+                controller = self.LexerController(
+                    self,
+                    init_lineno,
+                    init_pos
+                )
+                action(controller)
+
+        # Return if a non-ignored pattern was found, else continue lexing until a token is found
+        if ignore:
+            return self.lex()
+
+        else:
             return token

@@ -17,12 +17,12 @@ def WORD(t):
 rules = [
     (r"[aeiouy]", vowel_counter, "trigger_on_contain"),
     (r"[a-z]+", WORD),
-    (r"/--_*--/", "COMMENT", "non_greedy"),
+    (r"/--_*--/", None, "non_greedy"),
     (r" ", None)
 ]
 
 terminal_actions = [
-    reset_lexer_params
+    (reset_lexer_params, "always")
 ]
 
 lexer = Lexer(
@@ -36,7 +36,7 @@ lexer.build()
 
 buffer = """
 i say hello and you say goodbye world
-/-- Some comment --/
+/-- Some comment --/ oops
 """
 
 visual_lexer.plot_dfa(lexer.dfa.start)
@@ -54,5 +54,5 @@ tk = True
 while tk:
     tk = loaded.lex()
     print(tk)
-    if tk:
+    if tk and tk.type == "WORD":
         print("%s has %d vowels" % (tk.value, tk.params['vowels']))
