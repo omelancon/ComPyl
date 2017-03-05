@@ -3,58 +3,43 @@ from src.Visual import visual_lexer
 import copy
 
 
-def DISPLAY_STATE(t):
-    from pprint import pprint
-    pprint(t.params)
+def vowel_counter(t):
+    value = t.buffer[t.init_pos:t.pos]
+    t.params['vowels'] += 1
 
 
-def COMMENT(t, v):
-    t.params["comments"] += 1
+def reset_lexer_params(t):
+    t.params['vowels'] = 0
+
+
+def WORD(t):
+    value = t.buffer[t.init_pos:t.pos + 1]
+    return "WORD", {'vowels': t.params['vowels']}
 
 rules = [
-    (r"for", "FOR"),
-    (r"if", "IF"),
-    (r"else", "ELSE"),
-    (r"print", "PRINT"),
-    (r"break", "BREAK"),
-    (r"to", "TO"),
-    (r"\(", "L_PAR"),
-    (r"\)", "R_PAR"),
-    (r":", "COLON"),
-    (r";", "SEMICOLON"),
-    (r"/--_*--/", COMMENT, "non_greedy"),
-    (r"\"[a-zA-Z0-9]*\"", "STRING"),
-    (r"[a-zA-Z]+", "ID"),
-    (r"0|([1-9][0-9]*)", "INT"),
-    (r"\053", "PLUS"),
-    (r"\x2d", "MINUS"),
-    (r"=", "ASSIGN"),
-    (r"==", "EQ"),
-    (r"[ \t]+", None)
+    (r"[aeiouy]", vowel_counter, "trigger_on_contain"),
+    (r"[a-z]+", WORD),
+    (r"/--_*--/", "COMMENT", "non_greedy"),
+    (r" ", None)
 ]
 
 terminal_actions = [
-    DISPLAY_STATE
+    reset_lexer_params
 ]
-
-buffer = """
-x = 0
-
-for:
-    if x == 10:
-        break;
-    else:
-        /-- We can comment a bit here --/
-        print x;
-"""
 
 lexer = Lexer(
     rules=rules,
+    line_rule="\n",
     terminal_actions=terminal_actions,
-    params={'comments': 0}
+    params={'vowels': 0}
 )
-lexer.set_line_rule("\n")
+
 lexer.build()
+
+buffer = """
+i say hello and you say goodbye world
+/-- Some comment --/
+"""
 
 visual_lexer.plot_dfa(lexer.dfa.start)
 
@@ -71,3 +56,5 @@ tk = True
 while tk:
     tk = loaded.lex()
     print(tk)
+    if tk:
+        print("%s has %d vowels" % (tk.value, tk.params['vowels']))

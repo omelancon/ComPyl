@@ -14,9 +14,11 @@ class Token:
     Basic token built by the lexer
     """
 
-    def __init__(self, type, value, params=None, lineno=None):
+    def __init__(self, type, value, pos, end_pos, params=None, lineno=None):
         self.type = type
         self.value = value
+        self.pos = pos
+        self.end_pos = end_pos
         self.lineno = lineno
         self.params = params
 
@@ -87,11 +89,17 @@ class Lexer:
         lexer, thus it is ok to directly mutate it.
         """
 
-        def __init__(self, master):
+        def __init__(self, master, init_lineno, init_pos, forced_pos=None):
             self.lineno = master.lineno
-            self.pos = master.pos
+
+            # On trigger_on_contain actions, sub-patterns trigger actions lazily, thus the end pos is at the last
+            # character and not one ahead. We use forced_pos to enforce consistency with the Lexer position usually
+            # displayed when a token is returned.
+            self.pos = forced_pos if forced_pos else master.pos
             self.buffer = master.buffer
             self.params = master.params
+            self.init_lineno = init_lineno
+            self.init_pos = init_pos
 
             def increment_line(*args):
                 increment = args[0] if args else 1
@@ -188,7 +196,7 @@ class Lexer:
         self.pos = 0
 
     def set_line_rule(self, line_rule):
-        def line_incrementer(t, v): t.increment_line()
+        def line_incrementer(t): t.increment_line()
 
         self.add_rules([
             (line_rule, None),
@@ -255,9 +263,13 @@ class Lexer:
                 for action_type, action in special_actions:
 
                     if action_type == DFA.TRIGGER_ON_CONTAIN:
-                        controller = self.LexerController(self)
-                        value = self.buffer[init_pos:self.pos]
-                        action(controller, value)
+                        controller = self.LexerController(
+                            self,
+                            init_lineno,
+                            init_pos,
+                            forced_pos=self.pos + 1
+                        )
+                        action(controller)
 
             if lookout_state is None:
                 try:
@@ -281,7 +293,12 @@ class Lexer:
 
         elif isinstance(terminal_token, str):
             # Case where the terminal token is a string
-            token = Token(terminal_token, value, lineno=init_lineno)
+            token = Token(
+                terminal_token,
+                value,
+                init_pos,
+                self.pos,
+                lineno=init_lineno)
 
         else:
             # Case where the terminal token is a function to be called
@@ -289,12 +306,16 @@ class Lexer:
             # if a string is returned, it is taken as the Token type
             # if None is returned, it is interpreted as an ignored sequence
 
-            controller = self.LexerController(self)
+            controller = self.LexerController(
+                self,
+                init_lineno,
+                init_pos
+            )
 
             try:
-                token_return = terminal_token(controller, value)
+                token_return = terminal_token(controller)
             except TypeError:
-                raise LexerError("Lexer rules must be string or function LexerController -> string -> (string/None, *)")
+                raise LexerError("Lexer rules must be string or function LexerController -> (string/None, *)")
 
             token_type = None
             token_params = None
@@ -313,7 +334,12 @@ class Lexer:
                 )
 
             if not ignore:
-                token = Token(token_type, value, params=token_params, lineno=init_lineno)
+                token = Token(token_type,
+                              value,
+                              init_pos,
+                              self.pos,
+                              params=token_params,
+                              lineno=init_lineno)
 
         # Return if a non-ignored pattern was found, else continue lexing until a token is found
         if ignore:
@@ -321,7 +347,11 @@ class Lexer:
         else:
             # Before returning a token, we trigger all terminal actions
             for action in self.terminal_actions:
-                controller = self.LexerController(self)
+                controller = self.LexerController(
+                    self,
+                    init_lineno,
+                    init_pos
+                )
                 action(controller)
 
             return token
