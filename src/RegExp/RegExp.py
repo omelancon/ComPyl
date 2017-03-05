@@ -431,6 +431,7 @@ def get_escaped_ascii(regexp, pos):
     elif char == "W":
         # Non-alphanumerical-or-underscore
         ascii_list = [(0, 64), (91, 94), (96, 96), (123, 255)]
+        new_pos = pos + 1
 
     elif char == "d":
         # Digits
