@@ -132,11 +132,11 @@ class Lexer:
         if buffer:
             self.read(buffer)
 
-        if rules:
-            self.add_rules(rules)
-
         if line_rule:
             self.set_line_rule(line_rule)
+
+        if rules:
+            self.add_rules(rules)
 
         if terminal_actions:
             self.add_terminal_actions(terminal_actions)
