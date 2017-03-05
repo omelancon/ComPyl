@@ -255,8 +255,8 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
     node = None
 
     if regexp[pos] == "\\":
-        ascii, pos = get_escaped_ascii(regexp, pos + 1)
-        node = RegexpTree('single', ascii, ascii)
+        intervals, pos = get_escaped_ascii(regexp, pos + 1)
+        node = reduce_interval_list_to_regexp_tree_union(intervals)
         nodes = [node]
 
     elif regexp[pos] == "[":
@@ -382,9 +382,11 @@ def get_next_regexp_tree_token(regexp, pos=0, nodes_list=None):
 
 def get_escaped_ascii(regexp, pos):
     """
-    Return the ascii value of an escaped char, i.e. preceded by a \
+    Return the ascii values of an escaped char, i.e. preceded by a \
     In particular, regexp should be build using raw strings, thus we need to implement the python built-in escape
     sequences
+    We also implement special sequences with the same convention as they are in the re Python module
+    The function has two return values. The first is a list of intervals of ascii values, the second is the new position
     """
     escape = {"a": "\a",
               "b": "\b",
@@ -398,24 +400,63 @@ def get_escaped_ascii(regexp, pos):
     char = regexp[pos]
 
     if char in escape:
-        return ord(escape[char]), pos + 1
+        ascii = ord(escape[char])
+        ascii_list = [(ascii, ascii)]
+        new_pos = pos + 1
 
     elif char == "x":
         # Hexadecimal
         try:
-            return int(regexp[pos + 1: pos + 3], 16), pos + 3
+            ascii = int(regexp[pos + 1: pos + 3], 16)
+            ascii_list = [(ascii, ascii)]
+            new_pos = pos + 3
         except (ValueError, IndexError):
             raise RegexpParsingException("bad hexadecimal syntax, must be of format \\xhh")
 
     elif char == "0":
         # Octal, anything else than 0 is not detected since ascii values are bounded at 255
         try:
-            return int(regexp[pos + 1: pos + 3], 8), pos + 3
+            ascii = int(regexp[pos + 1: pos + 3], 8)
+            ascii_list = [(ascii, ascii)]
+            new_pos = pos + 3
         except (ValueError, IndexError):
             raise RegexpParsingException("bad octal syntax, must be of format \\0oo")
 
+    elif char == "s":
+        # Whitespaces
+        ascii_list = [(9, 13), (32, 32)]
+        new_pos = pos + 1
+
+    elif char == "S":
+        # Non-whitespaces
+        ascii_list = [(0, 8), (14, 31), (33, 255)]
+        new_pos = pos + 1
+
+    elif char == "w":
+        # Alphanumerical and underscore
+        ascii_list = [(65, 90), (95, 95), (97, 122)]
+        new_pos = pos + 1
+
+    elif char == "W":
+        # Non-alphanumerical-or-underscore
+        ascii_list = [(0, 64), (91, 94), (96, 96), (123, 255)]
+
+    elif char == "d":
+        # Digits
+        ascii_list = [(48, 57)]
+        new_pos = pos + 1
+
+    elif char == "D":
+        # Non-digits
+        ascii_list = [(0, 47), (58, 255)]
+        new_pos = pos + 1
+
     else:
-        return ord(char), pos + 1
+        ascii = ord(char)
+        ascii_list = [(ascii, ascii)]
+        new_pos = pos + 1
+
+    return ascii_list, new_pos
 
 
 def get_regexptree_union_from_set(inner_set):
@@ -434,8 +475,8 @@ def get_regexptree_union_from_set(inner_set):
 
         while pos < length:
             if inner_set[pos] == "\\":
-                ascii, pos = get_escaped_ascii(inner_set, pos)
-                intervals.append((ascii, ascii))
+                escaped_intervals, pos = get_escaped_ascii(inner_set, pos)
+                intervals.extend(escaped_intervals)
 
             elif inner_set[pos] == "-":
                 try:

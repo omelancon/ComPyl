@@ -15,8 +15,8 @@ def WORD(t):
     return "WORD", {'vowels': t.params['vowels']}
 
 rules = [
-    (r"[aeiouy]", vowel_counter, "trigger_on_contain"),
-    (r"[a-z]+", WORD),
+    (r"[aeiouyAEIOUY]", vowel_counter, "trigger_on_contain"),
+    (r"\w+", WORD),
     (r"/--_*--/", None, "non_greedy"),
     (r" ", None)
 ]
@@ -36,7 +36,8 @@ lexer.build()
 
 buffer = """
 i say hello and you say goodbye world
-/-- Some comment --/ oops
+/-- Some comment --/
+We Also TAKE Capitals and UNDER_scores
 """
 
 visual_lexer.plot_dfa(lexer.dfa.start)
