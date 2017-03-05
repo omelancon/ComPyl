@@ -413,15 +413,6 @@ def get_escaped_ascii(regexp, pos):
         except (ValueError, IndexError):
             raise RegexpParsingException("bad hexadecimal syntax, must be of format \\xhh")
 
-    elif char == "0":
-        # Octal, anything else than 0 is not detected since ascii values are bounded at 255
-        try:
-            ascii = int(regexp[pos + 1: pos + 3], 8)
-            ascii_list = [(ascii, ascii)]
-            new_pos = pos + 3
-        except (ValueError, IndexError):
-            raise RegexpParsingException("bad octal syntax, must be of format \\0oo")
-
     elif char == "s":
         # Whitespaces
         ascii_list = [(9, 13), (32, 32)]
