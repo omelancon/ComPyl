@@ -14,7 +14,7 @@ class Node:
 
 
 def A(*args):
-    print "Do something here"
+    print("Do something here")
     return Node(args[0])
 
 
