@@ -53,6 +53,7 @@ class NodeFiniteAutomaton(object):
         Extra arguments and keyword arguments are passed to the object generator.
 
         REMARK: in the case of a DFA, be aware that add_transition does not check for already existing transitions.
+        Using it incorrectly can transform a DFA back into a NFA
         """
         lookout = (min_ascii, max_ascii)
         new_state = self.__class__(*args, **kwargs)
@@ -789,24 +790,7 @@ class DFA:
         # we will merge such lookouts. By example if from State x, the intervals (97,98) and (99, 102) lead to State y,
         # we merge the lookouts so that (97, 102) leads to State y.
 
-        for id, state in minimum_dfa.items():
-            inverse_map = {}
-
-            for lookout, target in state['transitions'].items():
-                if target in inverse_map:
-                    inverse_map[target].append(lookout)
-                else:
-                    inverse_map[target] = [lookout]
-
-            new_transitions = {}
-
-            for target, lookouts in inverse_map.items():
-                new_lookouts = IntervalOp.merge_intervals(lookouts)
-
-                for lookout in new_lookouts:
-                    new_transitions[lookout] = target
-
-            state['transitions'] = new_transitions
+        merge_adjacent_dfa_lookouts(minimum_dfa)
 
         # ========================================================
         # Build the final data structure of the DFA
@@ -977,6 +961,32 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
                                'transitions': transitions}
 
     return minimal_dfa
+
+
+def merge_adjacent_dfa_lookouts(dfa_as_dict):
+    """
+    For each state in the dfa_as_dict, recover the lookouts for each target in the transitions and merge adjacent
+    transitions. Ex: (2, 5) -> y and (6, 9) -> y will be updated to (2, 9) -> y.
+    Mutate dfa_as_dict
+    """
+    for id, state in dfa_as_dict.items():
+        inverse_map = {}
+
+        for lookout, target in state['transitions'].items():
+            if target in inverse_map:
+                inverse_map[target].append(lookout)
+            else:
+                inverse_map[target] = [lookout]
+
+        new_transitions = {}
+
+        for target, lookouts in inverse_map.items():
+            new_lookouts = IntervalOp.merge_intervals(lookouts)
+
+            for lookout in new_lookouts:
+                new_transitions[lookout] = target
+
+        state['transitions'] = new_transitions
 
 
 def recover_nodes_set_from_nfa(nfa):
