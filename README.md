@@ -1,7 +1,3 @@
-# Lexer
+# ComPly
 
-A lexer in Python.
-
-# Parser
-
-A sketch of parser.
+A Lexer and Parser in Python. Still in heavy development.
