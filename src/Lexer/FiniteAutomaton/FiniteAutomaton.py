@@ -25,7 +25,7 @@ class NodeFiniteAutomaton(object):
     # Special lookout values
     EMPTY = (-1, -1)
 
-    # Special terminal values reserved for a terminal state that is ignored (no returned token)
+    # Special terminal values reserved for a terminal state that is accepted but ignored (no returned token)
     IGNORED = -1
 
     def __init__(self, terminal_token=None, special_actions=None, counter=None):
@@ -796,7 +796,6 @@ class DFA:
         # Build the final data structure of the DFA
         # ========================================================
         # dfa_nodes_table now contains all the information required to build the minimal DFA as a NodeDFA object
-        # We first create the NodeDFA nodes to link afterward
 
         dfa_start = build_dfa_from_dict(minimum_dfa, initial_epsilon_group)
 
@@ -967,6 +966,7 @@ def build_dfa_from_dict(dfa_as_dict, starting_state_id):
     objects and return the starting state
     """
 
+    # We first create the NodeDFA nodes to link them afterward
     dfa_nodes_as_dict = {sub_id: NodeDFA() for sub_id in dfa_as_dict}
 
     for sub_id, node in dfa_nodes_as_dict.items():
