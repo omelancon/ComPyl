@@ -798,37 +798,9 @@ class DFA:
         # dfa_nodes_table now contains all the information required to build the minimal DFA as a NodeDFA object
         # We first create the NodeDFA nodes to link afterward
 
-        dfa_nodes_as_dict = {sub_id: NodeDFA() for sub_id in minimum_dfa}
+        dfa_start = build_dfa_from_dict(minimum_dfa, initial_epsilon_group)
 
-        for sub_id, node in dfa_nodes_as_dict.items():
-
-            # Set the terminal token
-            is_terminal = minimum_dfa[sub_id]['is_terminal']
-            if is_terminal:
-                token = minimum_dfa[sub_id]['terminal']
-                node.set_terminal_token(token)
-
-            # Set the transition states
-            for lookout, target in minimum_dfa[sub_id]['transitions'].items():
-                if target:
-                    node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
-
-            # Set the special actions
-            node.set_special_actions(minimum_dfa[sub_id]['special_actions'])
-
-            # We sort the lookouts for easy recovery
-            node.sort_lookouts()
-
-        # Finally we recover the starting node to return it
-        initial_node_id = None
-        for fset in dfa_nodes_as_dict:
-            if initial_epsilon_group in fset:
-                initial_node_id = fset
-                break
-        else:
-            raise FiniteAutomatonError("For unknown reason, the build algorithm lost its own initial state. Puzzling.")
-
-        return dfa_nodes_as_dict[initial_node_id]
+        return dfa_start
 
 
 # ======================================================================================================================
@@ -987,6 +959,44 @@ def merge_adjacent_dfa_lookouts(dfa_as_dict):
                 new_transitions[lookout] = target
 
         state['transitions'] = new_transitions
+
+
+def build_dfa_from_dict(dfa_as_dict, starting_state_id):
+    """
+    Given a table-like dict structure of a DFA and the id of the starting node in the table, build the graph of NodeDFA
+    objects and return the starting state
+    """
+
+    dfa_nodes_as_dict = {sub_id: NodeDFA() for sub_id in dfa_as_dict}
+
+    for sub_id, node in dfa_nodes_as_dict.items():
+
+        # Set the terminal token
+        is_terminal = dfa_as_dict[sub_id]['is_terminal']
+        if is_terminal:
+            token = dfa_as_dict[sub_id]['terminal']
+            node.set_terminal_token(token)
+
+        # Set the transition states
+        for lookout, target in dfa_as_dict[sub_id]['transitions'].items():
+            if target:
+                node.add_transition_to_state(lookout[0], lookout[1], dfa_nodes_as_dict[target])
+
+        # Set the special actions
+        node.set_special_actions(dfa_as_dict[sub_id]['special_actions'])
+
+        # We sort the lookouts for easy recovery
+        node.sort_lookouts()
+
+    # Finally we recover the starting node to return it
+    for fset in dfa_nodes_as_dict:
+        if starting_state_id in fset:
+            initial_node_id = fset
+            break
+    else:
+        raise FiniteAutomatonError("For unknown reason, the build algorithm lost its own initial state. Puzzling.")
+
+    return dfa_nodes_as_dict[initial_node_id]
 
 
 def recover_nodes_set_from_nfa(nfa):
