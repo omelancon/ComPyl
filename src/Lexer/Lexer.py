@@ -240,8 +240,8 @@ class Lexer:
         self.dfa = DFA(self.rules)
 
     def save(self, filename="lexer.p"):
-        file = open(filename, "wb")
-        dill.dump(self, file)
+        with open(filename, "wb") as file:
+            dill.dump(self, file)
 
     @staticmethod
     def load(path):
