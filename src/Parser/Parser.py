@@ -46,3 +46,10 @@ class Parser:
 
     def parse(self):
         pass
+
+
+# Algorithm:
+# Build DFA for given rules (when merging NFA, look for shift/reduce and reduce/reduce conflicts)
+# Traverse tokens with DFA
+# When an error is seen, put state in a stack and restart DFA from current position, take return value as lookout
+# Only raise when an error is seen at starting state of DFA
