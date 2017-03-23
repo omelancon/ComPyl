@@ -13,10 +13,9 @@ terminals = [
 ]
 
 rules = {
-    "prog": ("state*", lambda x : AST("prog", *x)),
-    "state": ("if", None)
+    "prog": ("statement*", lambda x : AST("prog", *x)),
+    "statement": ("if", None)
 }
-
 
 
 class ParserException(Exception):
@@ -53,3 +52,34 @@ class Parser:
 # Traverse tokens with DFA
 # When an error is seen, put state in a stack and restart DFA from current position, take return value as lookout
 # Only raise when an error is seen at starting state of DFA
+
+
+def format_rules(rules):
+
+    for token, rule in rules.items():
+        pass
+
+
+def parse_rule(rule):
+    pass
+
+
+def spread_arguments_with_none(sorted_none_pos, fn):
+    return lambda *args: fn(*insert_element_at_positions(sorted_none_pos, None, args))
+
+
+def insert_element_at_positions(sorted_pos_list, element, list):
+    new_list = []
+    next_element_pos = sorted_pos_list.pop()
+
+    index = 0
+    while sorted_pos_list:
+
+        while index != next_element_pos:
+            new_list.append(list.pop())
+            index += 1
+
+        new_list.append(element)
+        next_element_pos = sorted_pos_list.pop()
+
+    return new_list + list[index:]
