@@ -75,7 +75,7 @@ def format_rules(rules):
 def append_many(lists, element, at_sub_pos=None):
 
     for ls in lists:
-        if at_sub_pos:
+        if at_sub_pos is not None:
             ls[at_sub_pos].append(element)
         else:
             ls.append(element)
@@ -105,8 +105,10 @@ def parse_rule(rule):
             append_many(split_rule, pos, at_sub_pos=1)
             append_many(parsed_rule, token, at_sub_pos=0)
 
+            parsed_rule += split_rule
+
         else:
-            append_many(parsed_rule[0], token, at_sub_pos=0)
+            append_many(parsed_rule, token, at_sub_pos=0)
 
     return [(pattern_as_list, spread_arguments_with_none(nones, fn)) for pattern_as_list, nones in parsed_rule]
 
@@ -137,11 +139,11 @@ def insert_none_at_positions(sorted_pos_list, list):
         next_element_pos = sorted_pos_list.pop(0)
 
         while new_list_index != next_element_pos:
-            new_list.append(list.pop(0))
+            new_list.append(list[old_list_index])
             old_list_index += 1
             new_list_index += 1
 
         new_list.append(None)
         new_list_index += 1
 
-    return new_list + list[old_list_index:]
+    return new_list + [arg for arg in list[old_list_index:]]
