@@ -2,19 +2,21 @@ import copy
 import dill
 import re
 
+
 # EX of a rule
 
 class AST(object):
     def __init__(self, *args):
         self.type = args[0]
-        self. children = args[1:]
+        self.children = args[1:]
+
 
 terminals = [
     "prog"
 ]
 
 rules = {
-    "prog": ("statement*", lambda x : AST("prog", *x)),
+    "prog": ("statement*", lambda x: AST("prog", *x)),
     "statement": ("if", None)
 }
 
@@ -54,26 +56,39 @@ class Parser:
 # When an error is seen, put state in a stack and restart DFA from current position, take return value as lookout
 # Only raise when an error is seen at starting state of DFA
 
+# ======================================================================================================================
+# Rule formatting
+# ======================================================================================================================
+
 
 def format_rules(rules):
-
+    """
+    :param rules: rules are given in the following format
+        rules = {
+            'token': [
+                ('keyword1 keyword2 keyword3', function),
+                ('keyword4 keyword5', other_function)
+            ]
+            'other_token': [
+                ...
+            ],
+            ...
+        }
+    :return: The return format is similar but strings of keywords have been replaced by lists of keywords and special
+        symbols (such as ?) have been parsed to add corresponding rules
+    """
     formatted_rules = {}
 
     for token, token_rules in rules.items():
 
-        if hasattr(formatted_rules, token):
-            raise ParserException("duplicate rule: %s is defined twice" % token)
-
-        else:
-            formatted_rules[token] = []
-            for rule in token_rules:
-                formatted_rules[token].extend(parse_rule(rule))
+        formatted_rules[token] = []
+        for rule in token_rules:
+            formatted_rules[token].extend(parse_rule(rule))
 
     return formatted_rules
 
 
 def append_many(lists, element, at_sub_pos=None):
-
     for ls in lists:
         if at_sub_pos is not None:
             ls[at_sub_pos].append(element)
@@ -110,7 +125,8 @@ def parse_rule(rule):
         else:
             append_many(parsed_rule, token, at_sub_pos=0)
 
-    return [(pattern_as_list, spread_arguments_with_none(nones, fn)) for pattern_as_list, nones in parsed_rule]
+    return [(pattern_as_list, spread_arguments_with_none(optional_pos, fn)) for pattern_as_list, optional_pos in
+            parsed_rule]
 
 
 def is_token_valid(token): return True if re.compile(r'^\w+\??$').match(token) else False
@@ -129,14 +145,17 @@ def spread_arguments_with_none(sorted_none_pos, fn):
 def insert_none_at_positions(sorted_pos_list, list):
     """
     :param sorted_pos_list: The positions where None must be inserted, this list must be sorted
-    :param list: The list of length >= max(sorted_pos_list)
+    :param list: The list of length >= max(sorted_pos_list) + len(sorted_pos_list)
     :return: A list but where None has been inserted at the given position provided
     """
     new_list = []
-    new_list_index = old_list_index = 0
+    pop_list_index = new_list_index = old_list_index = 0
 
-    while sorted_pos_list:
-        next_element_pos = sorted_pos_list.pop(0)
+    len_sorted_pos_list = len(sorted_pos_list)
+
+    while pop_list_index < len_sorted_pos_list:
+        next_element_pos = sorted_pos_list[pop_list_index]
+        pop_list_index += 1
 
         while new_list_index != next_element_pos:
             new_list.append(list[old_list_index])
