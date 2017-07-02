@@ -4,7 +4,7 @@ class ParserAutomatonError(Exception):
     pass
 
 class NodeFiniteAutomaton:
-    def __init__(self, closure=tuple(), is_terminal=False, counter=None):
+    def __init__(self, closure=tuple(), is_terminal=False, counter=None, shift_parent=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
@@ -14,6 +14,7 @@ class NodeFiniteAutomaton:
 
         # Dict of shifts from current state.
         # Keys of the dict are token (string), values are a tuple (NodeFiniteAutomaton, function)
+        # The values can be list of such before the final state. This is to keep track of reduce/reduce conflicts
         self.reduce = {}
 
         # Indicates if the node is terminal, i.e. accepting state
@@ -22,8 +23,21 @@ class NodeFiniteAutomaton:
         # Parsing closure representation of the state
         self.closure = tuple(closure)
 
+        # Node that shifts to the current one
+        self.shift_parent = shift_parent
+
     def add_shift(self, lookout, target_node):
         self.shifts[lookout] = target_node
+        target_node.shift_parent = self
+
+    def get_nth_shift_parent(self, n):
+        return self if n < 1 else self.shift_parent.get_nth_shift_parent(n - 1)
+
+    def add_reduce(self, lookout, target, reducer):
+        if lookout in self.reduce:
+            self.reduce[lookout].append((target, reducer))
+        else:
+            self.reduce[lookout] = [target]
 
 
 def build_initial_node(rules, terminal_tokens):
@@ -41,7 +55,7 @@ def build_initial_node(rules, terminal_tokens):
             raise ParserAutomatonError("Terminal Token is not present in rules")
 
         for rule, reducer in token_rules:
-            initial_lr_items.append(LrItem([], rule))
+            initial_lr_items.append(LrItem([], rule, token, None, reducer))
 
     closure = get_closure(initial_lr_items, rules)
 
@@ -50,13 +64,14 @@ def build_initial_node(rules, terminal_tokens):
         is_terminal=True
     )
 
+
 def get_items_with_lookout(lookout, lf_items):
     """
     :param lookout: token (string)
     :param lf_items: list of LfItem's
     :return: filtered list of LfItem which accept lookout
     """
-    return filter(lambda item: item.is_lookout_acctepted(lookout), lf_items)
+    return list(filter(lambda item: item.is_lookout_accepted(lookout), lf_items))
 
 
 def build_dfa_shifts(rules, terminal_tokens):
@@ -67,7 +82,7 @@ def build_dfa_shifts(rules, terminal_tokens):
     """
     initial_node = build_initial_node(rules, terminal_tokens)
 
-    nodes_dict_by_closure = {initial_node.closure: initial_node}
+    nodes = [initial_node]
 
     pending_nodes = [initial_node]
 
@@ -79,7 +94,7 @@ def build_dfa_shifts(rules, terminal_tokens):
         while lf_items:
             item = lf_items[0]
 
-            if item.is_fully_parsed:
+            if item.is_fully_parsed():
                 # Case where the LF item cannot shift
                 lf_items = lf_items[1:]
             else:
@@ -92,19 +107,35 @@ def build_dfa_shifts(rules, terminal_tokens):
                 # We will treat the items which accept that lookout, so remove them from pending items
                 lf_items = [item for item in lf_items if item not in same_lookout_items]
 
-                new_state_closure = get_closure(same_lookout_items, rules)
+                # Shift the items and create the closure
+                shifted_items = [item.get_shifted_item() for item in same_lookout_items]
+                new_state_closure = get_closure(shifted_items, rules)
 
-                if new_state_closure in nodes_dict_by_closure:
-                    # The state associated to the calculated closure exists, just add it to shifts
-                    node.add_shift(lookout, nodes_dict_by_closure[new_state_closure])
-                else:
-                    # The state associated to the closure does not exist, create it then add it to shifts
-                    new_state = NodeFiniteAutomaton(closure=new_state_closure)
-                    nodes_dict_by_closure[new_state_closure] = new_state
-                    node.add_shift(lookout, new_state)
-                    pending_nodes.append(new_state)
+                # Create the new state and keep track of it
+                new_state = NodeFiniteAutomaton(closure=new_state_closure)
+                nodes.append(new_state)
+                pending_nodes.append(new_state)
 
-    return initial_node, nodes_dict_by_closure
+                # Add the transition/shift to the current node
+                node.add_shift(lookout, new_state)
+
+    return initial_node, nodes
+
+
+def add_reduces_to_node(node):
+    for lr_item in [item for item in node.closure if node.is_fully_parsed()]:
+        step_back_for_reduce = lr_item.get_parsed_length()
+        reduce_to_node = node.get_nth_shift_parent(step_back_for_reduce)
+        reducer = lr_item.reducer
+        consumed_tokens = lr_item.len_token_reduce()
+
+        node.add_reduce(lr_item.lookout, reduce_to_node, reducer, consumed_tokens)
+
+
+def add_reduces_to_dfa(shift_only_dfa_nodes):
+    for node in shift_only_dfa_nodes:
+        add_reduces_to_dfa(node)
+
 
 def build_dfa(rules, terminal_tokens):
     """
@@ -113,14 +144,10 @@ def build_dfa(rules, terminal_tokens):
     :return:
     """
 
-    shift_only_dfa = build_dfa_shifts(rules, terminal_tokens)
-    
+    initial_node, dfa = build_dfa_shifts(rules, terminal_tokens)
+    add_reduces_to_dfa(dfa)
 
-
-
-
-
-
+    return initial_node, dfa
 
 
 # ======================================================================================================================
@@ -129,9 +156,12 @@ def build_dfa(rules, terminal_tokens):
 
 
 class LrItem:
-    def __init__(self, parsed, expected):
+    def __init__(self, parsed, expected, token, lookouts, reducer):
         self.parsed = tuple(parsed)
         self.expected = tuple(expected)
+        self.token = token
+        self.lookouts = lookouts
+        self.reducer = reducer
 
     def __hash__(self):
         return hash((self.parsed, self.expected))
@@ -148,11 +178,51 @@ class LrItem:
         else:
             return False
 
-    def get_next_expected_token(self):
-        return self.expected[0]
+    def get_next_expected_token(self, pos=0):
+        return self.expected[pos]
 
-    def move_demarkator(self):
-        return LrItem(self.parsed + [self.expected[0]], self.expected[1:])
+    def get_next_expected_atomics(self, rules, pos=0):
+        atomics = set()
+        nullable = False
+
+        # If there is no expected token at position, return empty set
+        if len(self.expected) > pos:
+            inspected_tokens = []
+            tokens_to_inspect = [self.expected[pos]]
+
+            # Breadth-first-search like dig down of the rules to get atomic tokens under a given token
+            #
+            while tokens_to_inspect:
+                token = tokens_to_inspect.pop(0)
+                inspected_tokens.append(token)
+
+                if token in rules:
+                    rule = rules[token]
+                    for sequence, _ in rule:
+                        if not sequence:
+                            nullable = True
+                        elif sequence[0] not in inspected_tokens:
+                            tokens_to_inspect.append(sequence[0])
+                else:
+                    # An atomic token is one that is not in the rules' keys
+                    atomics.add(token)
+
+        return atomics, nullable
+
+    def get_shifted_item(self):
+        return LrItem(
+            self.parsed + tuple([self.expected[0]]),
+            self.expected[1:],
+            self.token,
+            self.lookouts,
+            self.reducer
+        )
+
+    def get_parsed_length(self):
+        return len(self.parsed)
+
+    def len_token_reduce(self):
+        return len(self.parsed) + len(self.expected)
 
 
 def get_closure(initial_items, rules):
@@ -176,8 +246,22 @@ def get_closure(initial_items, rules):
                 except KeyError:
                     continue
 
-                for rule, _ in next_token_rules:
-                    new_item = LrItem([], rule)
+                for rule, reducer in next_token_rules:
+                    pos = 1
+                    lookouts = set()
+                    atomics, nullable = item.get_next_expected_atomics(rules, pos)
+
+                    lookouts = lookouts.union(atomics)
+
+                    while nullable:
+                        pos += 1
+                        atomics, nullable = item.get_next_expected_atomics(rules, pos)
+                        lookouts = lookouts.union(atomics)
+
+                    if not lookouts:
+                        lookouts = item.lookouts
+
+                    new_item = LrItem([], rule, next_token, lookouts, reducer)
                     next_pending_items.add(new_item)
 
         closure = closure.union(pending_items)
