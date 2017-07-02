@@ -1,19 +1,51 @@
 from copy import copy
 
+
 class ParserAutomatonError(Exception):
     pass
 
+
 class NodeFiniteAutomaton:
+    def __init__(self, is_terminal=False, counter=None, transitions=None):
+        # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
+        self.id = counter.next() if counter else id(self)
+
+        # Dict of shift and reduce transition from current state.
+        # Keys of the dict are token (string), values are a NodeFiniteAutomaton
+        self.transitions = transitions
+
+        # Indicates if the node is terminal, i.e. accepting state
+        self.is_terminal = is_terminal
+
+
+class Conflict:
+    def __init__(self, type, node):
+        path = []
+
+
+        if type == "shift/reduce":
+
+        elif type == "reduce/reduce":
+
+        else:
+            raise ValueError("Invalid type for Conflict: " + str(type))
+
+
+class TmpNodeFiniteAutomaton:
+    """
+    Temporary object to build the parsing DFA nodes.
+    Meant to accept conflicts.
+    """
     def __init__(self, closure=tuple(), is_terminal=False, counter=None, shift_parent=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
         # Dict of shifts from current state.
-        # Keys of the dict are token (string), values are a NodeFiniteAutomaton
+        # Keys of the dict are token (string), values are a TmpNodeFiniteAutomaton
         self.shifts = {}
 
-        # Dict of shifts from current state.
-        # Keys of the dict are token (string), values are a tuple (NodeFiniteAutomaton, function)
+        # Dict of reduce from current state.
+        # Keys of the dict are token (string), values are a tuple (TmpNodeFiniteAutomaton, function)
         # The values can be list of such before the final state. This is to keep track of reduce/reduce conflicts
         self.reduce = {}
 
@@ -49,12 +81,11 @@ class NodeFiniteAutomaton:
                 self.reduce[lookout] = [reduce_element]
 
 
-
 def build_initial_node(rules, terminal_tokens):
     """
         :param rules: parsed rules
         :param terminal_tokens: list of terminal tokens (string)
-        :return: initial NodeFiniteAutomaton
+        :return: initial TmpNodeFiniteAutomaton
         """
     initial_lr_items = []
 
@@ -69,7 +100,7 @@ def build_initial_node(rules, terminal_tokens):
 
     closure = get_closure(initial_lr_items, rules)
 
-    return NodeFiniteAutomaton(
+    return TmpNodeFiniteAutomaton(
         closure=closure,
         is_terminal=True
     )
@@ -122,7 +153,7 @@ def build_dfa_shifts(rules, terminal_tokens):
                 new_state_closure = get_closure(shifted_items, rules)
 
                 # Create the new state and keep track of it
-                new_state = NodeFiniteAutomaton(closure=new_state_closure)
+                new_state = TmpNodeFiniteAutomaton(closure=new_state_closure)
                 nodes.append(new_state)
                 pending_nodes.append(new_state)
 
@@ -145,6 +176,10 @@ def add_reduces_to_node(node):
 def add_reduces_to_dfa(shift_only_dfa_nodes):
     for node in shift_only_dfa_nodes:
         add_reduces_to_node(node)
+
+
+def scan_conflicts(dfa):
+
 
 
 def build_dfa(rules, terminal_tokens):
@@ -278,8 +313,3 @@ def get_closure(initial_items, rules):
         pending_items = next_pending_items
 
     return tuple(closure)
-
-
-
-
-

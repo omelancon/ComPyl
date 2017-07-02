@@ -30,4 +30,6 @@ with open('test.p', "rb") as file:
 print(formatted_rules)
 print(formatted_rules['statement'][3][1]())
 
-build_dfa(formatted_rules, ["prog"])
+dfa = build_dfa(formatted_rules, ["prog"])
+
+print(dfa)
