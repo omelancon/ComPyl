@@ -33,11 +33,21 @@ class NodeFiniteAutomaton:
     def get_nth_shift_parent(self, n):
         return self if n < 1 else self.shift_parent.get_nth_shift_parent(n - 1)
 
-    def add_reduce(self, lookout, target, reducer):
-        if lookout in self.reduce:
-            self.reduce[lookout].append((target, reducer))
-        else:
-            self.reduce[lookout] = [target]
+    def add_reduce(self, lookouts, target, reducer, reduce_len):
+        reduce_element = {
+            "target": target,
+            "reducer": reducer,
+            "reduce_len": reduce_len
+        }
+        if lookouts is None:
+            lookouts = [None]
+
+        for lookout in lookouts:
+            if lookout in self.reduce:
+                self.reduce[lookout].append(reduce_element)
+            else:
+                self.reduce[lookout] = [reduce_element]
+
 
 
 def build_initial_node(rules, terminal_tokens):
@@ -123,18 +133,18 @@ def build_dfa_shifts(rules, terminal_tokens):
 
 
 def add_reduces_to_node(node):
-    for lr_item in [item for item in node.closure if node.is_fully_parsed()]:
+    for lr_item in [item for item in node.closure if item.is_fully_parsed()]:
         step_back_for_reduce = lr_item.get_parsed_length()
         reduce_to_node = node.get_nth_shift_parent(step_back_for_reduce)
         reducer = lr_item.reducer
-        consumed_tokens = lr_item.len_token_reduce()
+        reduce_len = lr_item.len_token_reduce()
 
-        node.add_reduce(lr_item.lookout, reduce_to_node, reducer, consumed_tokens)
+        node.add_reduce(lr_item.lookouts, reduce_to_node, reducer, reduce_len)
 
 
 def add_reduces_to_dfa(shift_only_dfa_nodes):
     for node in shift_only_dfa_nodes:
-        add_reduces_to_dfa(node)
+        add_reduces_to_node(node)
 
 
 def build_dfa(rules, terminal_tokens):
