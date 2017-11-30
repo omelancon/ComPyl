@@ -5,10 +5,12 @@ from src.Parser.FiniteAutomaton.FiniteAutomaton import build_dfa
 
 rules = {
     'stat': [
-        ('ifS', lambda x: x)
+        ('if stat', lambda x, y, z, w: x),
+        ('if stat else stat', lambda x, y, z, w, q: x)
     ],
-    'ifS': [
-        ('if stat else stat', lambda x, y, z, w: x)
+    'if': [
+        ('IF exp', lambda x: x),
+        ('IF exp', lambda x: x)
     ]
 }
 

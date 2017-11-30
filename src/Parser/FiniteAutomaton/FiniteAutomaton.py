@@ -5,6 +5,7 @@ from src.Parser.FiniteAutomaton.Conflict import find_conflicts
 class ParserAutomatonError(Exception):
     pass
 
+
 class RulesHaveConflicts(Exception):
     def __init__(self, conflicts):
 
@@ -55,25 +56,14 @@ class TmpNodeFiniteAutomaton:
         # Parsing closure representation of the state
         self.closure = tuple(closure)
 
-        # Node that shifts to the current one
-        self.shift_parent = None
-
-        # Lookout from which the shift_parent shifts to the current node
-        self.shift_parent_lookout = None
-
     def add_shift(self, lookout, target_node):
         self.shifts[lookout] = target_node
-        target_node.shift_parent = self
-        target_node.shift_parent_lookout = lookout
 
-    def get_nth_shift_parent(self, n):
-        return self if n < 1 else self.shift_parent.get_nth_shift_parent(n - 1)
-
-    def add_reduce(self, lookouts, target, reducer, reduce_len):
+    def add_reduce(self, lookouts, reduce_len, reducer, token):
         reduce_element = {
-            "target": target,
             "reducer": reducer,
-            "reduce_len": reduce_len
+            "reduce_len": reduce_len,
+            "token": token
         }
         if lookouts is None:
             lookouts = [None]
@@ -87,6 +77,7 @@ class TmpNodeFiniteAutomaton:
 # ======================================================================================================================
 # Build DFA
 # ======================================================================================================================
+
 
 def build_initial_node(rules, terminal_tokens):
     """
@@ -134,6 +125,8 @@ def build_dfa_shifts(rules, terminal_tokens):
 
     pending_nodes = [initial_node]
 
+    nodes_dict_by_closure = {}
+
     while pending_nodes:
         node = pending_nodes.pop(0)
 
@@ -157,27 +150,30 @@ def build_dfa_shifts(rules, terminal_tokens):
 
                 # Shift the items and create the closure
                 shifted_items = [item.get_shifted_item() for item in same_lookout_items]
-                new_state_closure = get_closure(shifted_items, rules)
+                next_state_closure = get_closure(shifted_items, rules)
 
-                # Create the new state and keep track of it
-                new_state = TmpNodeFiniteAutomaton(closure=new_state_closure)
-                nodes.append(new_state)
-                pending_nodes.append(new_state)
+                if next_state_closure in nodes_dict_by_closure:
+                    # A state with this closure already exists
+                    next_state = nodes_dict_by_closure[next_state_closure]
+                else:
+                    # Create the new state and keep track of it
+                    next_state = TmpNodeFiniteAutomaton(closure=next_state_closure)
+                    nodes.append(next_state)
+                    pending_nodes.append(next_state)
+                    nodes_dict_by_closure[next_state_closure] = next_state
 
                 # Add the transition/shift to the current node
-                node.add_shift(lookout, new_state)
+                node.add_shift(lookout, next_state)
 
     return initial_node, nodes
 
 
 def add_reduces_to_node(node):
     for lr_item in [item for item in node.closure if item.is_fully_parsed()]:
-        step_back_for_reduce = lr_item.get_parsed_length()
-        reduce_to_node = node.get_nth_shift_parent(step_back_for_reduce)
+        reduce_len = lr_item.get_parsed_length()
         reducer = lr_item.reducer
-        reduce_len = lr_item.len_token_reduce()
 
-        node.add_reduce(lr_item.lookouts, reduce_to_node, reducer, reduce_len)
+        node.add_reduce(lr_item.lookouts, reduce_len, reducer, lr_item.token)
 
 
 def add_reduces_to_dfa(shift_only_dfa_nodes):
@@ -217,7 +213,15 @@ class LrItem:
         self.reducer = reducer
 
     def __hash__(self):
-        return hash((self.parsed, self.expected))
+        return hash(
+            (
+                self.parsed,
+                self.expected,
+                self.token,
+                tuple(self.lookouts) if self.lookouts else None,
+                self.reducer
+            )
+        )
 
     def __eq__(self, other):
         return self.parsed == other.parsed and self.expected == other.expected
@@ -244,7 +248,7 @@ class LrItem:
             tokens_to_inspect = [self.expected[pos]]
 
             # Breadth-first-search like dig down of the rules to get atomic tokens under a given token
-            #
+
             while tokens_to_inspect:
                 token = tokens_to_inspect.pop(0)
                 inspected_tokens.append(token)
@@ -280,7 +284,7 @@ class LrItem:
 
 def get_closure(initial_items, rules):
     """
-    :param initial_states: List of LR_Item's
+    :param initial_items: List of LR_Item's
     :param rules: Parsed rules
     :return: Closure as tuple of LR_Item's
     """

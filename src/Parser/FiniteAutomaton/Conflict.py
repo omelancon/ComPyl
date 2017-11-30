@@ -3,48 +3,37 @@ class ConflictError(Exception):
 
 
 class Conflict:
-    def __init__(self, type, node=None):
-        self.path = None
-        self.lookout = None
-        self.reduce_reduce_targets = None
-        self.shift_reduce_target = None
-
+    def __init__(self, type, lookout, path):
         if type == "shift/reduce" or type == "reduce/reduce":
             self.type = type
-            self.node = node
+            self.path = path
+            self.lookout = lookout
+            self.reduce_reduce_targets = []
+            self.shift_reduce_target = None
 
         else:
             raise ConflictError("Invalid type for Conflict: " + str(type))
 
-    def set_path(self, node):
-        self.path = []
-        while node.shift_parent:
-            self.path = [node.shift_parent_lookout] + self.path
-            node = node.shift_parent
-
-    # TODO: The use of reducer encapsulate the token to which a stream is reduced, making us unable to store it for now
-
-    def add_reduce_reduce_conflict(self, lookout, reduce_reduce_targets=None):
+    def add_reduce_reduce_conflict(self, reduce_reduce_targets):
         if self.type == "reduce/reduce":
-            self.reduce_reduce_targets = []
-            self.lookout = lookout
             self.reduce_reduce_targets.append(reduce_reduce_targets)
         else:
             raise ConflictError("Cannot use add_reduce_reduce_conflict on shift/reduce conflict")
 
-    def add_shift_reduce_conflict(self, lookout, shift_reduce_target=None):
+    def add_shift_reduce_conflict(self, shift_reduce_target):
         if self.type == "shift/reduce":
-            self.lookout = lookout
             self.shift_reduce_target = shift_reduce_target
         else:
             raise ConflictError("Cannot use add_shift_reduce_conflict on reduce/reduce conflict")
 
     def to_string(self):
-        return self.type + ": " + ' '.join(self.path)
+        if self.type == 'reduce/reduce':
+            return self.type + ': ' + ' '.join(self.path) + ' . ' + self.lookout
+        elif self.type == 'shift/reduce':
+            return self.type + ': ' + ' '.join(self.path) + ' . ' + self.lookout
 
 
-
-def find_node_conflict(node):
+def find_node_conflict(node, path):
     """
     Return a list of conflicts found at this node
     :param node: TmpNodeFiniteAutomaton
@@ -52,17 +41,15 @@ def find_node_conflict(node):
     """
     conflicts = []
 
-    for lookout, targets in node.reduce.items():
-        if len(targets) > 1:
-            conflict = Conflict("reduce/reduce", node)
-            conflict.add_reduce_reduce_conflict(lookout)
-            conflict.set_path(node)
+    for lookout, reduce_elements in node.reduce.items():
+        if len(reduce_elements) > 1:
+            conflict = Conflict("reduce/reduce", lookout, path)
+            conflict.add_reduce_reduce_conflict(reduce_elements)
             conflicts.append(conflict)
 
         elif lookout in node.reduce and lookout in node.shifts:
-            conflict = Conflict("shift/reduce", node)
-            conflict.add_shift_reduce_conflict(lookout)
-            conflict.set_path(node)
+            conflict = Conflict("shift/reduce", lookout, path)
+            conflict.add_shift_reduce_conflict(reduce_elements[0])
             conflicts.append(conflict)
 
     return conflicts
@@ -76,17 +63,18 @@ def find_conflicts(dfa_initial_node):
     """
     conflicts = []
     seen_nodes = {}
-    queue = [dfa_initial_node]
+    queue = [(dfa_initial_node, [])]
 
     while queue:
-        node = queue.pop()
+        node, path = queue.pop()
 
         for lookout, child in node.shifts.items():
             if child not in seen_nodes:
-                queue.append(child)
+                queue.append((child, path + [lookout]))
+                seen_nodes[child] = True
 
-        conflict = find_node_conflict(node)
-        if conflict:
-            conflicts.append(conflict)
+        node_conflicts = find_node_conflict(node, path)
+        if node_conflicts:
+            conflicts += node_conflicts
 
     return conflicts
