@@ -1,8 +1,21 @@
 from copy import copy
+from src.Parser.FiniteAutomaton.Conflict import find_conflicts
 
 
 class ParserAutomatonError(Exception):
     pass
+
+class RulesHaveConflicts(Exception):
+    def __init__(self, conflicts):
+
+        qty_rr_conflicts = len([c for c in conflicts if c.type == "reduce/reduce"])
+        qty_sr_conflicts = len(conflicts) - qty_rr_conflicts
+
+        message = 'Conflicts detected | {0} reduce/reduce | {1} shift/reduce\n'.format(str(qty_rr_conflicts),
+                                                                                    str(qty_sr_conflicts))
+        message += '\n'.join(sorted([c.to_string() for c in conflicts]))
+
+        super(RulesHaveConflicts, self).__init__(message)
 
 
 class NodeFiniteAutomaton:
@@ -18,25 +31,12 @@ class NodeFiniteAutomaton:
         self.is_terminal = is_terminal
 
 
-class Conflict:
-    def __init__(self, type, node):
-        path = []
-
-
-        if type == "shift/reduce":
-
-        elif type == "reduce/reduce":
-
-        else:
-            raise ValueError("Invalid type for Conflict: " + str(type))
-
-
 class TmpNodeFiniteAutomaton:
     """
     Temporary object to build the parsing DFA nodes.
     Meant to accept conflicts.
     """
-    def __init__(self, closure=tuple(), is_terminal=False, counter=None, shift_parent=None):
+    def __init__(self, closure=tuple(), is_terminal=False, counter=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
@@ -56,11 +56,15 @@ class TmpNodeFiniteAutomaton:
         self.closure = tuple(closure)
 
         # Node that shifts to the current one
-        self.shift_parent = shift_parent
+        self.shift_parent = None
+
+        # Lookout from which the shift_parent shifts to the current node
+        self.shift_parent_lookout = None
 
     def add_shift(self, lookout, target_node):
         self.shifts[lookout] = target_node
         target_node.shift_parent = self
+        target_node.shift_parent_lookout = lookout
 
     def get_nth_shift_parent(self, n):
         return self if n < 1 else self.shift_parent.get_nth_shift_parent(n - 1)
@@ -80,6 +84,9 @@ class TmpNodeFiniteAutomaton:
             else:
                 self.reduce[lookout] = [reduce_element]
 
+# ======================================================================================================================
+# Build DFA
+# ======================================================================================================================
 
 def build_initial_node(rules, terminal_tokens):
     """
@@ -178,10 +185,6 @@ def add_reduces_to_dfa(shift_only_dfa_nodes):
         add_reduces_to_node(node)
 
 
-def scan_conflicts(dfa):
-
-
-
 def build_dfa(rules, terminal_tokens):
     """
     :param rules: parsed rules
@@ -191,6 +194,11 @@ def build_dfa(rules, terminal_tokens):
 
     initial_node, dfa = build_dfa_shifts(rules, terminal_tokens)
     add_reduces_to_dfa(dfa)
+
+    conflicts = find_conflicts(initial_node)
+
+    if conflicts:
+        raise RulesHaveConflicts(conflicts)
 
     return initial_node, dfa
 

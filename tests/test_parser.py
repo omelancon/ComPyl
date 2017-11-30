@@ -3,19 +3,12 @@ import dill
 from src.Parser.Parser import format_rules
 from src.Parser.FiniteAutomaton.FiniteAutomaton import build_dfa
 
-rules =  {
-    'prog': [
-        ('statement', lambda x: x)
+rules = {
+    'stat': [
+        ('ifS', lambda x: x)
     ],
-    'statement': [
-        ('if? else?', lambda x, y: (x, y)),
-        ('for instruction', lambda x, y: (x, y))
-    ],
-    'for': [
-        ('FOR', lambda x: x)
-    ],
-    'list': [
-        ("", lambda: 1)
+    'ifS': [
+        ('if stat else stat', lambda x, y, z, w: x)
     ]
 }
 
@@ -28,8 +21,7 @@ with open('test.p', "rb") as file:
     formatted_rules = dill.load(file)
 
 print(formatted_rules)
-print(formatted_rules['statement'][3][1]())
 
-dfa = build_dfa(formatted_rules, ["prog"])
+dfa = build_dfa(formatted_rules, ["stat"])
 
 print(dfa)
