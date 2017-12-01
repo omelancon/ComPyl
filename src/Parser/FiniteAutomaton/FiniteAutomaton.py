@@ -1,9 +1,12 @@
 from copy import copy
 from src.Parser.FiniteAutomaton.Conflict import find_conflicts
 
+initial_rule_name = '@Start'
+
 
 class ParserAutomatonError(Exception):
     pass
+
 
 class ParserRulesError(Exception):
     pass
@@ -51,6 +54,8 @@ class DFA:
         self.start = None
         self.current_state = None
         self.stack = []
+        self.done = False
+        self.output = None
 
         if rules:
             self.build(rules, terminal)
@@ -70,10 +75,21 @@ class DFA:
         self.start = self.current_state = build_dfa(rules, terminal_tokens)
 
     def push(self, token):
-        try:
-            self.push(token)
-        except ParserSyntaxError:
-            raise NotImplemented
+        if not self.done:
+            try:
+                self._push(token)
+            except ParserSyntaxError:
+                if token and token.type == initial_rule_name:
+                    self.done = True
+                    self.output = token.value
+                else:
+                    raise ParserSyntaxError
+        elif token is not None:
+            raise ParserSyntaxError('Parser was done but was given extra token')
+
+    def end(self):
+        self.push(None)
+        return self.output
 
     def _push(self, token):
         lookout = token.type if token else None
@@ -84,7 +100,7 @@ class DFA:
 
         if transition['type'] == 'reduce':
             self._reduce(transition['instruction'])
-            self._push(token)
+            self.push(token)
 
         elif transition['type'] == 'shift':
             self.stack.append((self.current_state, token))
@@ -102,24 +118,23 @@ class DFA:
         self.current_state = self.stack[-length][0]
         self.stack = self.stack[:-length]
 
-        self._push(new_token)
+        self.push(new_token)
 
     def reset(self):
         self.current_state = self.start
         self.stack = []
+        self.done = False
+        self.output = None
 
 
 class NodeFiniteAutomaton:
-    def __init__(self, is_terminal=False, counter=None, transitions=None):
+    def __init__(self, counter=None, transitions=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
         # Dict of shift and reduce transition from current state.
         # Keys of the dict are token (string), values are a NodeFiniteAutomaton
         self.transitions = transitions
-
-        # Indicates if the node is terminal, i.e. accepting state
-        self.is_terminal = is_terminal
 
     def set_transitions(self, transitions):
         self.transitions = transitions
@@ -131,7 +146,7 @@ class TmpNodeFiniteAutomaton:
     Meant to accept conflicts.
     """
 
-    def __init__(self, closure=tuple(), is_terminal=False, counter=None):
+    def __init__(self, closure=tuple(), counter=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
@@ -143,9 +158,6 @@ class TmpNodeFiniteAutomaton:
         # Keys of the dict are token (string), values are a tuple (TmpNodeFiniteAutomaton, function)
         # The values can be list of such before the final state. This is to keep track of reduce/reduce conflicts
         self.reduce = {}
-
-        # Indicates if the node is terminal, i.e. accepting state
-        self.is_terminal = is_terminal
 
         # Parsing closure representation of the state
         self.closure = tuple(closure)
@@ -181,7 +193,7 @@ class TmpNodeFiniteAutomaton:
         if conflicts:
             raise RulesHaveConflicts(conflicts)
 
-        node_translation = {node: NodeFiniteAutomaton(is_terminal=node.is_terminal) for node in dfa_nodes}
+        node_translation = {node: NodeFiniteAutomaton() for node in dfa_nodes}
 
         for node in dfa_nodes:
             transitions = {
@@ -206,26 +218,27 @@ class TmpNodeFiniteAutomaton:
 
 def build_initial_node(rules, terminal_tokens):
     """
-        :param rules: parsed rules
-        :param terminal_tokens: list of terminal tokens (string)
-        :return: initial TmpNodeFiniteAutomaton
-        """
-    initial_lr_items = []
+    :param rules: parsed rules
+    :param terminal_tokens: list of terminal tokens (string)
+    :return: initial TmpNodeFiniteAutomaton
+    """
 
     for token in terminal_tokens:
-        try:
-            token_rules = rules[token]
-        except KeyError:
+        if token not in rules:
             raise ParserAutomatonError("Terminal Token is not present in rules")
 
-        for rule, reducer in token_rules:
-            initial_lr_items.append(LrItem([], rule, token, None, reducer))
+    initial_lr_items = []
+
+    # Add rule for the initial node
+    rules[initial_rule_name] = [([t], lambda x: x) for t in terminal_tokens]
+
+    for rule, reducer in rules[initial_rule_name]:
+        initial_lr_items.append(LrItem([], rule, initial_rule_name, None, reducer))
 
     closure = get_closure(initial_lr_items, rules)
 
     return TmpNodeFiniteAutomaton(
-        closure=closure,
-        is_terminal=True
+        closure=closure
     )
 
 

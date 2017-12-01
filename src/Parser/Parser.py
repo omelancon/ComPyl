@@ -114,7 +114,7 @@ def spread_arguments_with_none(sorted_none_pos, fn):
     :return: A new function that takes len(sorted_none_pos) more argument than fn, but which arguments at positions
              in sorted_none_pos are expected to be None
     """
-    return lambda *args: fn(*insert_none_at_positions(sorted_none_pos, args)) if sorted_none_pos else fn
+    return (lambda *args: fn(*insert_none_at_positions(sorted_none_pos, args))) if sorted_none_pos else fn
 
 
 def insert_none_at_positions(sorted_pos_list, list):

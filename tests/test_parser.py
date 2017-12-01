@@ -4,6 +4,10 @@ from src.Parser.Parser import format_rules
 from src.Parser.FiniteAutomaton.FiniteAutomaton import DFA, Token
 
 rules = {
+    'prog':  [
+        ('stat', lambda x: x),
+        ('stat prog', lambda x, y: x)
+    ],
     'stat': [
         ('if stat end', lambda x, y, w: x),
         ('if stat else stat end', lambda x, y, z, w: x)
@@ -29,7 +33,7 @@ dfa.push(Token('if', None))
 dfa.push(Token('stat', None))
 dfa.push(Token('end', None))
 
-dfa.push(Token(None, None))
+result = dfa.end()
 
 
 print(dfa)
