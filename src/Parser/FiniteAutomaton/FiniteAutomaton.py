@@ -8,15 +8,35 @@ class ParserAutomatonError(Exception):
 
 class RulesHaveConflicts(Exception):
     def __init__(self, conflicts):
-
         qty_rr_conflicts = len([c for c in conflicts if c.type == "reduce/reduce"])
         qty_sr_conflicts = len(conflicts) - qty_rr_conflicts
 
         message = 'Conflicts detected | {0} reduce/reduce | {1} shift/reduce\n'.format(str(qty_rr_conflicts),
-                                                                                    str(qty_sr_conflicts))
+                                                                                       str(qty_sr_conflicts))
         message += '\n'.join(sorted([c.to_string() for c in conflicts]))
 
         super(RulesHaveConflicts, self).__init__(message)
+
+
+class DFA:
+    """
+    Build the DFA according to the given rules, save its starting node as self.start and initialize its
+    current_state to the start
+    """
+    def __init__(self, rules=None):
+        self.start = None
+        self.current_state = None
+
+        if rules:
+            self.build(rules)
+
+    def build(self, rules):
+        """
+        Build the DFA corresponding to the rules
+        :param rules: formated rules
+        :return:
+        """
+        self.start = self.current_state = build_dfa(rules)
 
 
 class NodeFiniteAutomaton:
@@ -31,12 +51,16 @@ class NodeFiniteAutomaton:
         # Indicates if the node is terminal, i.e. accepting state
         self.is_terminal = is_terminal
 
+    def set_transitions(self, transitions):
+        self.transitions = transitions
+
 
 class TmpNodeFiniteAutomaton:
     """
     Temporary object to build the parsing DFA nodes.
     Meant to accept conflicts.
     """
+
     def __init__(self, closure=tuple(), is_terminal=False, counter=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
@@ -73,6 +97,37 @@ class TmpNodeFiniteAutomaton:
                 self.reduce[lookout].append(reduce_element)
             else:
                 self.reduce[lookout] = [reduce_element]
+
+    def accept(self, dfa_nodes):
+        """
+        Recursively converts graph of TmpNodeFiniteAutomaton to graph of NodeFiniteAutomaton.
+        Must be called at the root of the DFA
+        This will fail if the rules have conflicts and raise RulesHaveConflicts exception
+        :return: NodeFiniteAutomaton
+        """
+
+        conflicts = find_conflicts(self)
+
+        if conflicts:
+            raise RulesHaveConflicts(conflicts)
+
+        node_translation = {node: NodeFiniteAutomaton(is_terminal=node.is_terminal) for node in dfa_nodes}
+
+        for node in dfa_nodes:
+            transitions = {
+                lookout:
+                    {'type': 'shift', 'instruction': node_translation[target]}
+                for lookout, target in node.shifts.items()
+                }
+            transitions.update(
+                {lookout:
+                    {'type': 'reduce', 'instruction': reduce_element[0]}
+                 for lookout, reduce_element in node.reduce.items()
+                 })
+            node_translation[node].set_transitions(transitions)
+
+        return node_translation[self]
+
 
 # ======================================================================================================================
 # Build DFA
@@ -191,12 +246,9 @@ def build_dfa(rules, terminal_tokens):
     initial_node, dfa = build_dfa_shifts(rules, terminal_tokens)
     add_reduces_to_dfa(dfa)
 
-    conflicts = find_conflicts(initial_node)
+    initial_node = initial_node.accept(dfa)
 
-    if conflicts:
-        raise RulesHaveConflicts(conflicts)
-
-    return initial_node, dfa
+    return initial_node
 
 
 # ======================================================================================================================

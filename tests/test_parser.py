@@ -1,15 +1,14 @@
 import dill
 
 from src.Parser.Parser import format_rules
-from src.Parser.FiniteAutomaton.FiniteAutomaton import build_dfa
+from src.Parser.FiniteAutomaton.FiniteAutomaton import build_dfa, DFA
 
 rules = {
     'stat': [
-        ('if stat', lambda x, y, z, w: x),
-        ('if stat else stat', lambda x, y, z, w, q: x)
+        ('if stat end', lambda x, y, z, w: x),
+        ('if stat else stat end', lambda x, y, z, w, q: x)
     ],
     'if': [
-        ('IF exp', lambda x: x),
         ('IF exp', lambda x: x)
     ]
 }

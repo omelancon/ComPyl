@@ -329,7 +329,7 @@ class NodeDFA(NodeFiniteAutomaton):
 
 class DFA:
 
-    # Ids for the special actions as we do not want to store them as trings in the DFA
+    # Ids for the special actions as we do not want to store them as strings in the DFA
     TRIGGER_ON_CONTAIN = 1
     NON_GREEDY = 2
 
