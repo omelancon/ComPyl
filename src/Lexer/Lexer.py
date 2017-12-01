@@ -22,14 +22,14 @@ class Token:
         self.params = params
 
     def __str__(self):
-        return "<Token %s line %s>" % (self.type, str(self.lineno))
+        return "<Lexer Token %s line %s>" % (self.type, str(self.lineno))
 
     def __eq__(self, other):
         if isinstance(other, Token):
             return self.type == other.type
 
         else:
-            return NotImplemented
+            raise NotImplemented
 
 
 class Lexer:

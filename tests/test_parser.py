@@ -1,15 +1,15 @@
 import dill
 
 from src.Parser.Parser import format_rules
-from src.Parser.FiniteAutomaton.FiniteAutomaton import build_dfa, DFA
+from src.Parser.FiniteAutomaton.FiniteAutomaton import DFA, Token
 
 rules = {
     'stat': [
-        ('if stat end', lambda x, y, z, w: x),
-        ('if stat else stat end', lambda x, y, z, w, q: x)
+        ('if stat end', lambda x, y, w: x),
+        ('if stat else stat end', lambda x, y, z, w: x)
     ],
     'if': [
-        ('IF exp', lambda x: x)
+        ('IF exp', lambda x, y: x)
     ]
 }
 
@@ -23,6 +23,13 @@ with open('test.p', "rb") as file:
 
 print(formatted_rules)
 
-dfa = build_dfa(formatted_rules, ["stat"])
+dfa = DFA(rules=formatted_rules, terminal='stat')
+
+dfa.push(Token('if', None))
+dfa.push(Token('stat', None))
+dfa.push(Token('end', None))
+
+dfa.push(Token(None, None))
+
 
 print(dfa)

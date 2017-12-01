@@ -5,6 +5,13 @@ from src.Parser.FiniteAutomaton.Conflict import find_conflicts
 class ParserAutomatonError(Exception):
     pass
 
+class ParserRulesError(Exception):
+    pass
+
+
+class ParserSyntaxError(Exception):
+    pass
+
 
 class RulesHaveConflicts(Exception):
     def __init__(self, conflicts):
@@ -18,25 +25,88 @@ class RulesHaveConflicts(Exception):
         super(RulesHaveConflicts, self).__init__(message)
 
 
+class Token:
+    def __init__(self, type, value):
+        self.type = type
+        self.value = value
+
+    def __str__(self):
+        return "<Parser Token %s>" % self.type
+
+    def __eq__(self, other):
+        if isinstance(other, Token):
+            return self.type == other.type
+
+        else:
+            raise NotImplemented
+
+
 class DFA:
     """
     Build the DFA according to the given rules, save its starting node as self.start and initialize its
     current_state to the start
     """
-    def __init__(self, rules=None):
+
+    def __init__(self, rules=None, terminal=None):
         self.start = None
         self.current_state = None
+        self.stack = []
 
         if rules:
-            self.build(rules)
+            self.build(rules, terminal)
 
-    def build(self, rules):
+    def build(self, rules, terminal_tokens):
         """
         Build the DFA corresponding to the rules
+        :param terminal_tokens:
         :param rules: formated rules
         :return:
         """
-        self.start = self.current_state = build_dfa(rules)
+        if terminal_tokens is None:
+            raise ParserRulesError("No terminal token was given")
+        elif not isinstance(terminal_tokens, list):
+            terminal_tokens = [terminal_tokens]
+        self.stack = []
+        self.start = self.current_state = build_dfa(rules, terminal_tokens)
+
+    def push(self, token):
+        try:
+            self.push(token)
+        except ParserSyntaxError:
+            raise NotImplemented
+
+    def _push(self, token):
+        lookout = token.type if token else None
+        if lookout not in self.current_state.transitions:
+            raise ParserSyntaxError
+
+        transition = self.current_state.transitions[lookout]
+
+        if transition['type'] == 'reduce':
+            self._reduce(transition['instruction'])
+            self._push(token)
+
+        elif transition['type'] == 'shift':
+            self.stack.append((self.current_state, token))
+            self.current_state = transition['instruction']
+
+    def _reduce(self, reduce_instruction):
+        reducer = reduce_instruction['reducer']
+        length = reduce_instruction['reduce_len']
+        token_type = reduce_instruction['token']
+
+        reduced_value = reducer(*[token for node, token in self.stack[-length:]])
+
+        new_token = Token(token_type, reduced_value)
+
+        self.current_state = self.stack[-length][0]
+        self.stack = self.stack[:-length]
+
+        self._push(new_token)
+
+    def reset(self):
+        self.current_state = self.start
+        self.stack = []
 
 
 class NodeFiniteAutomaton:
