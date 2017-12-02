@@ -19,15 +19,15 @@ rules = {
 
 formatted_rules = format_rules(rules)
 
-with open('test.p', "wb") as file:
-    dill.dump(formatted_rules, file)
-
-with open('test.p', "rb") as file:
-    formatted_rules = dill.load(file)
-
 print(formatted_rules)
 
 dfa = DFA(rules=formatted_rules, terminal='stat')
+
+with open('test.p', "wb") as file:
+    dill.dump(dfa, file)
+
+with open('test.p', "rb") as file:
+    dfa = dill.load(file)
 
 dfa.push(Token('if', None))
 dfa.push(Token('stat', None))

@@ -237,7 +237,7 @@ class Lexer:
                     the string can take values 'always', 'only_ignored' or 'only_tokens'""")
 
     def build(self):
-        self.dfa = DFA(self.rules)
+        self.dfa = DFA(rules=self.rules)
 
     def save(self, filename="lexer.p"):
         with open(filename, "wb") as file:

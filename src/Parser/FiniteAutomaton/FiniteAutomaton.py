@@ -1,4 +1,4 @@
-from copy import copy
+from copy import copy, deepcopy
 from src.Parser.FiniteAutomaton.Conflict import find_conflicts
 
 initial_rule_name = '@Start'

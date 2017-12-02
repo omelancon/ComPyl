@@ -2,34 +2,62 @@ import copy
 import dill
 import re
 
+from src.Parser.FiniteAutomaton.FiniteAutomaton import DFA
+
 
 class ParserException(Exception):
     pass
 
 
 class Parser:
-    def __init__(self, lexer=None, rules=None):
-        self.lexer = None
+    def __init__(self, rules=None, terminal=None):
         self.rules = {}
+        self.terminals = []
 
         if rules:
             self.add_rules(rules)
 
-        if lexer:
-            self.lexer = copy.copy(lexer)
+        if terminal:
+            self.set_terminals(terminal)
+
+    def set_terminals(self, terminals):
+        self.terminals = terminals
 
     def add_rules(self, rules):
-        pass
+        self.rules.update(rules)
 
     def build(self):
-        pass
+        formatted_rules = format_rules(self.rules)
+        self.dfa = DFA(formatted_rules, self.terminals)
 
-    def save(self, filename="parser.p"):
+    def save(self, filename="lexer.p"):
         with open(filename, "wb") as file:
             dill.dump(self, file)
 
-    def parse(self):
-        pass
+    @staticmethod
+    def load(path):
+
+        file = open(path, "rb")
+
+        try:
+            parser = dill.load(file)
+        finally:
+            file.close()
+
+        if isinstance(parser, Parser):
+            return parser
+        else:
+            raise ParserException("The unpickled object from " + path + " is not a Parser")
+
+    def parse(self, token):
+        if token:
+            self.dfa.push(token)
+            return None
+        else:
+            return self.end()
+
+    def end(self):
+        return self.dfa.end()
 
 # ======================================================================================================================
 # Rule formatting
