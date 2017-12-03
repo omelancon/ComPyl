@@ -1,5 +1,5 @@
-from copy import copy, deepcopy
-from src.Parser.FiniteAutomaton.Conflict import find_conflicts
+from copy import copy
+from src.Parser.FiniteAutomaton.GrammarError import find_conflicts, GrammarError
 
 initial_rule_name = '@Start'
 
@@ -14,18 +14,6 @@ class ParserRulesError(Exception):
 
 class ParserSyntaxError(Exception):
     pass
-
-
-class RulesHaveConflicts(Exception):
-    def __init__(self, conflicts):
-        qty_rr_conflicts = len([c for c in conflicts if c.type == "reduce/reduce"])
-        qty_sr_conflicts = len(conflicts) - qty_rr_conflicts
-
-        message = 'Conflicts detected | {0} reduce/reduce | {1} shift/reduce\n'.format(str(qty_rr_conflicts),
-                                                                                       str(qty_sr_conflicts))
-        message += '\n'.join(sorted([c.to_string() for c in conflicts]))
-
-        super(RulesHaveConflicts, self).__init__(message)
 
 
 class Token:
@@ -184,14 +172,14 @@ class TmpNodeFiniteAutomaton:
         """
         Recursively converts graph of TmpNodeFiniteAutomaton to graph of NodeFiniteAutomaton.
         Must be called at the root of the DFA
-        This will fail if the rules have conflicts and raise RulesHaveConflicts exception
+        This will fail if the rules have conflicts and raise GrammarError exception
         :return: NodeFiniteAutomaton
         """
 
         conflicts = find_conflicts(self)
 
         if conflicts:
-            raise RulesHaveConflicts(conflicts)
+            raise GrammarError(conflicts=conflicts)
 
         node_translation = {node: NodeFiniteAutomaton() for node in dfa_nodes}
 

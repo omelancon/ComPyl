@@ -2,6 +2,37 @@ class ConflictError(Exception):
     pass
 
 
+class GrammarError(Exception):
+    def __init__(self, conflicts=None, reduce_cycles=None):
+        if conflicts is None:
+            conflicts = []
+
+        if reduce_cycles is None:
+            reduce_cycles = []
+
+        qty_rr_conflicts = len([c for c in conflicts if c.type == "reduce/reduce"])
+        qty_sr_conflicts = len(conflicts) - qty_rr_conflicts
+        qty_reduce_cycles = len(reduce_cycles)
+
+        message = 'Grammar errors detected' +\
+            (' | {0} reduce/reduce'.format(str(qty_rr_conflicts)) if qty_rr_conflicts else '') +\
+            (' | {0} shift/reduce'.format(str(qty_sr_conflicts)) if qty_sr_conflicts else '') +\
+            (' | {0} reduce cycle'.format(str(qty_reduce_cycles)) if qty_reduce_cycles else '') +\
+            '\n'
+        message += '\n'.join(sorted([c.to_string() for c in conflicts + reduce_cycles]))
+
+        super(GrammarError, self).__init__(message)
+
+
+class ReduceCycle:
+    def __init__(self, cycle):
+        self.cycle = cycle
+
+    def to_string(self):
+        return 'reduce cycle: the following reduction will never terminate\n' + ' ' * len('reduce cycle  ') +\
+            ' -> '.join(self.cycle)
+
+
 class Conflict:
     def __init__(self, type, lookout, path):
         if type == "shift/reduce" or type == "reduce/reduce":

@@ -2,6 +2,7 @@ import dill
 
 from src.Parser.Parser import format_rules
 from src.Parser.FiniteAutomaton.FiniteAutomaton import DFA, Token
+from src.Parser.Parser import Parser
 
 rules = {
     'prog':  [
@@ -9,11 +10,15 @@ rules = {
         ('stat prog', lambda x, y: x)
     ],
     'stat': [
+        ('lol', lambda x: x),
         ('if stat end', lambda x, y, w: x),
         ('if stat else stat end', lambda x, y, z, w: x)
     ],
     'if': [
         ('IF exp', lambda x, y: x)
+    ],
+    'lol': [
+        ('prog', lambda x: x)
     ]
 }
 

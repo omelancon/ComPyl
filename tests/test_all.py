@@ -30,6 +30,7 @@ class If:
         self.then_statement = args[3].value
         self.else_statement = args[4].value
 
+
 class Dec:
     def __init__(self, *args):
         self.var = args[0].value
@@ -38,7 +39,7 @@ class Dec:
 parser_rules = {
     'code': [
         ('stat code', Code),
-        ('stat', Code)
+        ('stat', Code),
     ],
     'stat': [
         ('IF VAR THEN stat else? END', If),
@@ -65,3 +66,4 @@ while t:
 
 code = parser.end()
 print(code)
+
