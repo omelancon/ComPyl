@@ -413,6 +413,7 @@ def get_closure(initial_items, rules):
     """
     closure = set()
     pending_items = set(initial_items)
+    seen_items = {}
 
     while pending_items:
         next_pending_items = set()
@@ -442,7 +443,9 @@ def get_closure(initial_items, rules):
                         lookouts = item.lookouts
 
                     new_item = LrItem([], rule, next_token, lookouts, reducer)
-                    next_pending_items.add(new_item)
+                    if new_item not in seen_items:
+                        seen_items[new_item] = True
+                        next_pending_items.add(new_item)
 
         closure = closure.union(pending_items)
         pending_items = next_pending_items

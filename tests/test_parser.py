@@ -22,11 +22,27 @@ rules = {
     ]
 }
 
+rules = {
+    'exp': [
+        ('factor PLUS exp', lambda x: x),
+        ('factor', lambda x: x)
+    ],
+    'factor': [
+        ('atomic TIMES factor', lambda x: x),
+        ('atomic', lambda x: x)
+    ],
+    'atomic':[
+        ('NUMBER', lambda x: x),
+        ('VARIABLE', lambda x: x),
+        ('LEFT_PAR exp RIGHT_PAR', lambda x: x)
+    ]
+}
+
 formatted_rules = format_rules(rules)
 
 print(formatted_rules)
 
-dfa = DFA(rules=formatted_rules, terminal='stat')
+dfa = DFA(rules=formatted_rules, terminal='exp')
 
 with open('test.p', "wb") as file:
     dill.dump(dfa, file)
