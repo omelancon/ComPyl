@@ -1,5 +1,5 @@
 from copy import copy
-from src.Parser.FiniteAutomaton.GrammarError import find_conflicts, GrammarError
+from src.Parser.GrammarError import find_conflicts, GrammarError
 
 initial_rule_name = '@Start'
 
