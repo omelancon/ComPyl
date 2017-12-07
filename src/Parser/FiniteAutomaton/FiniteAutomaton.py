@@ -1,4 +1,5 @@
 from copy import copy
+from src.Lexer import Lexer
 from src.Parser.GrammarError import find_conflicts, GrammarError
 
 initial_rule_name = '@Start'
@@ -17,6 +18,11 @@ class ParserSyntaxError(Exception):
 
 
 class Token:
+    """
+    An internal token used by the parser to store type and value.
+    Contrary to the Lexer.Token, this should never be returned to the user since self.value will contain a custom
+    token defined by the user and built by the reducer.
+    """
     def __init__(self, type, value):
         self.type = type
         self.value = value
@@ -99,12 +105,15 @@ class DFA:
         length = reduce_instruction['reduce_len']
         token_type = reduce_instruction['token']
 
-        reduced_value = reducer(*[token for node, token in self.stack[-length:]])
+        reducer_args = [token if isinstance(token, Lexer.Token) else token.value for node, token in
+                        self.stack[-length:]] if length > 0 else []
+        reduced_value = reducer(*reducer_args)
 
         new_token = Token(token_type, reduced_value)
 
-        self.current_state = self.stack[-length][0]
-        self.stack = self.stack[:-length]
+        if length > 0:
+            self.current_state = self.stack[-length][0]
+            self.stack = self.stack[:-length]
 
         self.push(new_token)
 
@@ -191,7 +200,7 @@ class TmpNodeFiniteAutomaton:
                 }
             transitions.update(
                 {lookout:
-                    {'type': 'reduce', 'instruction': reduce_element[0]}
+                     {'type': 'reduce', 'instruction': reduce_element[0]}
                  for lookout, reduce_element in node.reduce.items()
                  })
             node_translation[node].set_transitions(transitions)

@@ -23,18 +23,9 @@ rules = {
 }
 
 rules = {
-    'exp': [
-        ('factor PLUS exp', lambda x: x),
-        ('factor', lambda x: x)
-    ],
-    'factor': [
-        ('atomic TIMES factor', lambda x: x),
-        ('atomic', lambda x: x)
-    ],
-    'atomic':[
-        ('NUMBER', lambda x: x),
-        ('VARIABLE', lambda x: x),
-        ('LEFT_PAR exp RIGHT_PAR', lambda x: x)
+    'declaration_list': [
+        ('', lambda: []),
+        ('declaration declaration_list', lambda dec, dec_list: [dec] + dec_list)
     ]
 }
 
@@ -42,7 +33,7 @@ formatted_rules = format_rules(rules)
 
 print(formatted_rules)
 
-dfa = DFA(rules=formatted_rules, terminal='exp')
+dfa = DFA(rules=formatted_rules, terminal='declaration_list')
 
 with open('test.p', "wb") as file:
     dill.dump(dfa, file)
@@ -50,9 +41,9 @@ with open('test.p', "wb") as file:
 with open('test.p', "rb") as file:
     dfa = dill.load(file)
 
-dfa.push(Token('if', None))
-dfa.push(Token('stat', None))
-dfa.push(Token('end', None))
+dfa.push(Token('declaration', None))
+dfa.push(Token('declaration', None))
+dfa.push(Token('declaration', None))
 
 result = dfa.end()
 
