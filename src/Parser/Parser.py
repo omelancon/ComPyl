@@ -14,6 +14,7 @@ class Parser:
     def __init__(self, rules=None, terminal=None):
         self.rules = {}
         self.terminals = []
+        self.dfa = None
 
         if rules:
             self.add_rules(rules)
