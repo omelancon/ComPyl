@@ -14,11 +14,11 @@ class GrammarError(Exception):
         qty_sr_conflicts = len(conflicts) - qty_rr_conflicts
         qty_reduce_cycles = len(reduce_cycles)
 
-        message = 'Grammar errors detected' +\
-            (' | {0} reduce/reduce'.format(str(qty_rr_conflicts)) if qty_rr_conflicts else '') +\
-            (' | {0} shift/reduce'.format(str(qty_sr_conflicts)) if qty_sr_conflicts else '') +\
-            (' | {0} reduce cycle'.format(str(qty_reduce_cycles)) if qty_reduce_cycles else '') +\
-            '\n'
+        message = 'Grammar errors detected' + \
+                  (' | {0} reduce/reduce'.format(str(qty_rr_conflicts)) if qty_rr_conflicts else '') + \
+                  (' | {0} shift/reduce'.format(str(qty_sr_conflicts)) if qty_sr_conflicts else '') + \
+                  (' | {0} reduce cycle'.format(str(qty_reduce_cycles)) if qty_reduce_cycles else '') + \
+                  '\n'
         message += '\n'.join(sorted([c.to_string() for c in conflicts + reduce_cycles]))
 
         super(GrammarError, self).__init__(message)
@@ -29,8 +29,8 @@ class ReduceCycle:
         self.cycle = cycle
 
     def to_string(self):
-        return 'reduce cycle: the following reduction will never terminate\n' + ' ' * len('reduce cycle  ') +\
-            ' -> '.join(self.cycle)
+        return 'reduce cycle: the following reduction will never terminate\n' + ' ' * len('reduce cycle  ') + \
+               ' -> '.join(self.cycle)
 
 
 class Conflict:
@@ -63,14 +63,15 @@ class Conflict:
         if self.type == 'reduce/reduce':
             return self.type + ': ' + ' '.join(self.path) + ' . ' + self.lookout + '  can reduce to' + margin + \
                    margin.join(
-                       [' '.join(self.path[:-r['reduce_len']] + [r['token']]) + ' . ' + self.lookout for r in
-                        self.reduce_reduce_conflict]
+                       [' '.join((self.path[:-r['reduce_len']] if r['reduce_len'] > 0 else self.path) + [
+                           r['token']]) + ' . ' + self.lookout for r in self.reduce_reduce_conflict]
                    )
 
         elif self.type == 'shift/reduce':
-            return self.type + ': ' + ' '.join(self.path) + ' . ' + self.lookout + '  can shift or reduce to' +\
-                   margin + ' '.join(self.path[:-self.shift_reduce_conflict['reduce_len']] + [
-                       self.shift_reduce_conflict['token']]) + ' . ' + self.lookout
+            return self.type + ': ' + ' '.join(self.path) + ' . ' + self.lookout + '  can shift or reduce to' + \
+                   margin + ' '.join((self.path[:-self.shift_reduce_conflict['reduce_len']] if
+                                      self.shift_reduce_conflict['reduce_len'] > 0 else self.path) + [
+                                         self.shift_reduce_conflict['token']]) + ' . ' + self.lookout
 
 
 def find_node_conflict(node, path):
@@ -87,7 +88,7 @@ def find_node_conflict(node, path):
             conflict.add_reduce_reduce_conflict(reduce_elements)
             conflicts.append(conflict)
 
-        elif lookout in node.reduce and lookout in node.shifts:
+        if lookout in node.reduce and lookout in node.shifts:
             conflict = Conflict("shift/reduce", lookout, path)
             conflict.add_shift_reduce_conflict(reduce_elements[0])
             conflicts.append(conflict)
