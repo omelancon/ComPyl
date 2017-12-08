@@ -200,7 +200,7 @@ class TmpNodeFiniteAutomaton:
                 }
             transitions.update(
                 {lookout:
-                     {'type': 'reduce', 'instruction': reduce_element[0]}
+                    {'type': 'reduce', 'instruction': reduce_element[0]}
                  for lookout, reduce_element in node.reduce.items()
                  })
             node_translation[node].set_transitions(transitions)

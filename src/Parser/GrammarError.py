@@ -59,19 +59,20 @@ class Conflict:
 
     def to_string(self):
         margin = '\n' + ' ' * (len(self.type) + 2)
+        lookout = ['.', self.lookout] if self.lookout is not None else ['.']
 
         if self.type == 'reduce/reduce':
-            return self.type + ': ' + ' '.join(self.path) + ' . ' + self.lookout + '  can reduce to' + margin + \
+            return self.type + ': ' + ' '.join(self.path + lookout) + '  can reduce to' + margin + \
                    margin.join(
                        [' '.join((self.path[:-r['reduce_len']] if r['reduce_len'] > 0 else self.path) + [
-                           r['token']]) + ' . ' + self.lookout for r in self.reduce_reduce_conflict]
+                           r['token']] + lookout) for r in self.reduce_reduce_conflict]
                    )
 
         elif self.type == 'shift/reduce':
-            return self.type + ': ' + ' '.join(self.path) + ' . ' + self.lookout + '  can shift or reduce to' + \
+            return self.type + ': ' + ' '.join(self.path + lookout) + '  can shift or reduce to' + \
                    margin + ' '.join((self.path[:-self.shift_reduce_conflict['reduce_len']] if
                                       self.shift_reduce_conflict['reduce_len'] > 0 else self.path) + [
-                                         self.shift_reduce_conflict['token']]) + ' . ' + self.lookout
+                                         self.shift_reduce_conflict['token']] + lookout)
 
 
 def find_node_conflict(node, path):

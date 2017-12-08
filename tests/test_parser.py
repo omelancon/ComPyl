@@ -28,13 +28,16 @@ class Declaration:
         self.value = args
 
 
+def do_nothing(*args):
+    return None
+
+
 rules = {
-    'declaration_list': [
-        ('declaration declaration_list', lambda dec, dec_list: [dec] + dec_list)
+    'a': [
+        ('A B C', do_nothing)
     ],
-    'declaration': [
-        ('', lambda: None),
-        ('VAR EQUAL exp SEMICOLON', Declaration),
+    'b': [
+        ('A B C?', do_nothing)
     ]
 }
 
@@ -42,7 +45,7 @@ formatted_rules = format_rules(rules)
 
 print(formatted_rules)
 
-dfa = DFA(rules=formatted_rules, terminal='declaration_list')
+dfa = DFA(rules=formatted_rules, terminal=['a', 'b'])
 
 with open('test.p', "wb") as file:
     dill.dump(dfa, file)
@@ -50,9 +53,9 @@ with open('test.p', "wb") as file:
 with open('test.p', "rb") as file:
     dfa = dill.load(file)
 
-dfa.push(Token('declaration', 'a'))
-dfa.push(Token('declaration', 'b'))
-dfa.push(Token('declaration', 'c'))
+dfa.push(Token('LEFT_BRACKET', 'a'))
+dfa.push(Token('element', 'b'))
+dfa.push(Token('RIGHT_BRACKET', 'c'))
 
 result = dfa.end()
 
