@@ -1,6 +1,6 @@
 from copy import copy
-from src.Lexer import Lexer
-from src.Parser.GrammarError import find_conflicts, GrammarError
+from compyl.Lexer import Lexer
+from compyl.Parser.GrammarError import find_conflicts, GrammarError
 
 initial_rule_name = '@Start'
 

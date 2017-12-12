@@ -1,5 +1,5 @@
-from src.Lexer.Lexer import Lexer
-from src.Parser.Parser import Parser
+from compyl.Lexer.Lexer import Lexer
+from compyl.Parser.Parser import Parser
 
 lexer_rules = [
     (r'if', 'IF'),
@@ -20,15 +20,15 @@ lexer.build()
 
 class Code:
     def __init__(self, statement, next=None):
-        self.statements = [statement.value]
+        self.statements = [statement]
         if next:
-            self.statements += next.value.statements
+            self.statements += next.statements
 
 class If:
     def __init__(self, *args):
         self.cond = args[1].value
-        self.then_statement = args[3].value
-        self.else_statement = args[4].value
+        self.then_statement = args[3]
+        self.else_statement = args[4]
 
 
 class Dec:

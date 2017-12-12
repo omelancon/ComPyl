@@ -1,5 +1,5 @@
-from src.Lexer.Lexer import Lexer
-from src.Visual import visual_lexer
+from compyl.Lexer.Lexer import Lexer
+from compyl.Visual import visual_lexer
 import copy
 
 

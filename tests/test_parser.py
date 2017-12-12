@@ -1,8 +1,6 @@
 import dill
-
-from src.Parser.Parser import format_rules
-from src.Parser.FiniteAutomaton.FiniteAutomaton import DFA, Token
-from src.Parser.Parser import Parser
+from compyl.Parser.FiniteAutomaton import DFA, Token
+from compyl.Parser.Parser import format_rules
 
 rules = {
     'prog':  [
@@ -28,24 +26,11 @@ class Declaration:
         self.value = args
 
 
-def do_nothing(*args):
-    return None
-
-
-rules = {
-    'a': [
-        ('A B C', do_nothing)
-    ],
-    'b': [
-        ('A B C?', do_nothing)
-    ]
-}
-
 formatted_rules = format_rules(rules)
 
 print(formatted_rules)
 
-dfa = DFA(rules=formatted_rules, terminal=['a', 'b'])
+dfa = DFA(rules=formatted_rules, terminal='prog')
 
 with open('test.p', "wb") as file:
     dill.dump(dfa, file)

@@ -1,7 +1,7 @@
 import copy
 import re
 
-from src.RegExp.IntervalOperations import inverse_intervals_list, merge_intervals
+from compyl.Lexer.IntervalOperations import inverse_intervals_list, merge_intervals
 
 # ======================================================================================================================
 # Tokenize RegExp.py

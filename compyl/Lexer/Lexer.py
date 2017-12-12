@@ -1,7 +1,7 @@
 import copy
 import dill
 
-from .FiniteAutomaton.FiniteAutomaton import DFA, NodeIsNotTerminalState
+from compyl.Lexer.FiniteAutomaton import DFA, NodeIsNotTerminalState
 
 
 class LexerError(Exception):

@@ -2,8 +2,8 @@ import copy
 import dill
 import re
 
-from src.Parser.FiniteAutomaton.FiniteAutomaton import DFA
-from src.Parser.GrammarError import GrammarError, ReduceCycle
+from compyl.Parser.FiniteAutomaton import DFA
+from compyl.Parser.GrammarError import GrammarError, ReduceCycle
 
 
 class ParserException(Exception):

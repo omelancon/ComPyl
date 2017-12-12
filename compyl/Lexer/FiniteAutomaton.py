@@ -1,8 +1,9 @@
 from itertools import count
 
+import compyl.Lexer.RegExp as RegExp
+
+import compyl.Lexer.IntervalOperations as IntervalOp
 import copy
-import src.RegExp.IntervalOperations as IntervalOp
-import src.RegExp.RegExp as RegExp
 from functools import cmp_to_key
 
 
