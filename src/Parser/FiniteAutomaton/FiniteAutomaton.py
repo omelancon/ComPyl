@@ -5,10 +5,6 @@ from src.Parser.GrammarError import find_conflicts, GrammarError
 initial_rule_name = '@Start'
 
 
-class ParserAutomatonError(Exception):
-    pass
-
-
 class ParserRulesError(Exception):
     pass
 
@@ -222,7 +218,7 @@ def build_initial_node(rules, terminal_tokens):
 
     for token in terminal_tokens:
         if token not in rules:
-            raise ParserAutomatonError("Terminal Token is not present in rules")
+            raise ParserRulesError("Terminal Token is not present in rules")
 
     initial_lr_items = []
 
