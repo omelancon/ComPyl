@@ -2,3 +2,5 @@
 venv/
 *.png
 *.p
+*.pyc
+__pycache__

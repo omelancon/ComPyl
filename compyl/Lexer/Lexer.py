@@ -107,8 +107,8 @@ class Lexer:
 
             def increment_pos(*args):
                 increment = args[0] if args else 1
-                master.lineno += increment
-                self.lineno += increment
+                master.pos += increment
+                self.pos += increment
 
             self.increment_line = increment_line
             self.increment_pos = increment_pos

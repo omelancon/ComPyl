@@ -68,7 +68,7 @@ def binary_search_value_in_intervals(target, intervals, return_closest=False):
     index = None
 
     while left <= right:
-        index = (left + right) / 2
+        index = (left + right) // 2
         min, max = intervals[index]
 
         if target < min:
