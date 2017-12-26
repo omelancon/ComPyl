@@ -294,17 +294,14 @@ class NodeDFA(NodeFiniteAutomaton):
         """
         Copy the NodeDFA node, recursively copying the next_states
         """
-        if id(self) in memo:
-            return memo[id(self)]
 
-        else:
-            dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
-            dup.id = self.id
-            memo[id(self)] = dup
-            dup.special_actions = copy.copy(self.special_actions)
-            dup.next_states = [(lookout, state.__deepcopy__(memo)) for lookout, state in self.next_states]
+        dup = NodeDFA(terminal_token=copy.deepcopy(self.terminal_token))
+        dup.id = self.id
+        memo[id(self)] = dup
+        dup.special_actions = copy.copy(self.special_actions)
+        dup.next_states = [(lookout, copy.deepcopy(state, memo)) for lookout, state in self.next_states]
 
-            return dup
+        return dup
 
     def transition(self, ascii):
         """

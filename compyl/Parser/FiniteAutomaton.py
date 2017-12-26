@@ -1,4 +1,4 @@
-from copy import copy
+from copy import copy, deepcopy
 from compyl.Lexer import Lexer
 from compyl.Parser.GrammarError import find_conflicts, GrammarError
 
@@ -50,6 +50,26 @@ class DFA:
         if rules:
             self.build(rules, terminal)
 
+    def __copy__(self):
+        """
+        Identical as deepcopy as their is no point at returning a shallow copy
+        """
+        return self.__deepcopy__({})
+
+    def __deepcopy__(self, memo):
+        """
+        Return a copy of the DFA with a deepcopy of the graph
+        """
+        dup = DFA()
+
+        dup.start = deepcopy(self.start)
+        dup.current_state = dup.get_dfa_state_by_id(self.current_state.id)
+        dup.stack = deepcopy(self.stack)
+        dup.done = self.done
+        dup.output = self.output
+
+        return dup
+
     def build(self, rules, terminal_tokens):
         """
         Build the DFA corresponding to the rules
@@ -57,7 +77,7 @@ class DFA:
         :param rules: formated rules
         :return:
         """
-        if terminal_tokens is None:
+        if not terminal_tokens:
             raise ParserRulesError("No terminal token was given")
         elif not isinstance(terminal_tokens, list):
             terminal_tokens = [terminal_tokens]
@@ -119,18 +139,73 @@ class DFA:
         self.done = False
         self.output = None
 
+    def get_dfa_state_by_id(self, id):
+        """
+        Return the first state found with given 'id' (should be unique), None if no such state exists
+        This is used when copying to recover the copied current_state object
+        """
+        seen_states = set()
+        todo_states = [self.start]
+
+        while todo_states:
+            state = todo_states.pop()
+
+            if state.id == id:
+                return state
+
+            else:
+                seen_states.add(state)
+
+            for _, shift_transition in [t for t in state.transitions if t['type'] == 'shift']:
+                child_state = shift_transition['instruction']
+                if child_state not in seen_states:
+                    todo_states.append(child_state)
+
+        return None
+
 
 class NodeFiniteAutomaton:
     def __init__(self, counter=None, transitions=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
-        # Dict of shift and reduce transition from current state.
+        # Dict of shift transitions from current state.
         # Keys of the dict are token (string), values are a NodeFiniteAutomaton
         self.transitions = transitions
 
     def set_transitions(self, transitions):
         self.transitions = transitions
+
+    def __copy__(self):
+        """
+        Copy the NodeFiniteAutomaton node, linking it to the next states without copying those
+        """
+        dup = NodeFiniteAutomaton()
+        dup.id = self.id
+        dup.transitions = copy(self.transitions)
+
+        return dup
+
+    def __deepcopy__(self, memo):
+        """
+        Copy the NodeFiniteAutomaton node, recursively copying the transitions
+        """
+        dup = NodeFiniteAutomaton()
+        dup.id = self.id
+        memo[id(self)] = dup
+        dup.transitions = {}
+        for lookout, instruction in self.transitions.items():
+
+            if instruction['type'] == 'shift':
+                dup.transitions[lookout] = {
+                    'type': instruction['type'],
+                    'instruction': deepcopy(instruction['instruction'], memo)
+                }
+
+            elif instruction['type'] == 'reduce':
+                dup.transitions[lookout] = copy(instruction)
+
+        return dup
 
 
 class TmpNodeFiniteAutomaton:

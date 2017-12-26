@@ -414,6 +414,12 @@ class LexerTestRegexp(unittest.TestCase):
             self.assertRaises(LexerError, get_token_stream, lexer, c)
 
 
+class LexerTestRegexpPriority(unittest.TestCase):
+
+    def test_priority(self):
+        raise NotImplementedError
+
+
 class LexerTestTerminalAction(unittest.TestCase):
     def test_single_terminal_action(self):
         rules = [
@@ -535,7 +541,7 @@ class LexerTestBuild(unittest.TestCase):
 
     def test_special_action_choices(self):
         rules = [
-            ('a*', 'A', 'foo')
+            ('a', 'A', 'foo')
         ]
 
         lexer = Lexer(rules=rules)

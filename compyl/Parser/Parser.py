@@ -22,11 +22,35 @@ class Parser:
         if terminal:
             self.set_terminals(terminal)
 
+    def __copy__(self):
+        """
+        Copy the parser reusing the same DFA
+        :return:
+        """
+        dup = Parser(rules=self.rules, terminal=self.terminals)
+        dup.dfa = self.dfa
+
+        return dup
+
+    def __deepcopy__(self, memo):
+        """
+        Copy the parser and its DFA
+        :return:
+        """
+
+        dup = Parser(rules=self.rules, terminal=self.terminals)
+        dup.dfa = copy.deepcopy(self.dfa)
+
+        return dup
+
     def set_terminals(self, terminals):
         self.terminals = terminals
 
     def add_rules(self, rules):
-        self.rules.update(rules)
+        if rules_are_valid(rules):
+            self.rules.update(rules)
+        else:
+            raise ParserException("Invalid Rule Format")
 
     def build(self):
         formatted_rules = format_rules(self.rules)
@@ -64,6 +88,17 @@ class Parser:
 # ======================================================================================================================
 # Rule formatting
 # ======================================================================================================================
+
+
+def rules_are_valid(rules):
+    for _, rule in rules.items():
+        if not isinstance(rule, (list, tuple)):
+            return False
+        else:
+            for el in rule:
+                if not isinstance(el, (list, tuple)):
+                    return False
+    return True
 
 
 def format_rules(rules):
