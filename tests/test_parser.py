@@ -15,6 +15,14 @@ def placeholder_reducer(*args):
     return None
 
 
+def get_string_of_instructions_reducer(reduce_marker):
+    """
+    Return a reducer to make actions taken by the parser readable
+    Returned reducer returns a string of seen tokens and reduction markers provided separated by white spaces
+    """
+    return lambda *args: ' '.join([a.value if hasattr(a, 'value') else str(a) for a in args] + [reduce_marker])
+
+
 class Start:
     def __init__(self, a, b, end):
         self.a = a
@@ -123,7 +131,7 @@ class ParserTestBasic(unittest.TestCase):
 
         self.assertRaises(ParserSyntaxError, self.parser.parse, tk)
 
-    def test_uncomplete_stream(self):
+    def test_incomplete_stream(self):
 
         token_stream = generate_token_stream(
             'TOKEN_A',
@@ -135,6 +143,188 @@ class ParserTestBasic(unittest.TestCase):
             self.parser.parse(tk)
 
         self.assertRaises(ParserSyntaxError, self.parser.end)
+
+
+class ParserTestAdvanced(unittest.TestCase):
+
+    def test_advanced_grammar(self):
+        rules = {
+            'A': [
+                ('B A', get_string_of_instructions_reducer('A1')),
+                ('C A', get_string_of_instructions_reducer('A2')),
+                ('e', get_string_of_instructions_reducer('A3'))
+            ],
+            'B': [
+                ('a b c', get_string_of_instructions_reducer('B1')),
+                ('b c? a', get_string_of_instructions_reducer('B2'))
+            ],
+            'C': [
+                ('x Y B', get_string_of_instructions_reducer('C1')),
+                ('x y d', get_string_of_instructions_reducer('C2'))
+            ],
+            'Y': [
+                ('', get_string_of_instructions_reducer('Y1')),
+                ('y', get_string_of_instructions_reducer('Y2')),
+            ],
+        }
+
+        parser = Parser(rules=rules, terminal='A')
+        parser.build()
+
+        tokens = generate_token_stream(
+            ('x', 'x'),
+            ('b', 'b'),
+            ('a', 'a'),
+            ('x', 'x'),
+            ('y', 'y'),
+            ('a', 'a'),
+            ('b', 'b'),
+            ('c', 'c'),
+            ('e', 'e'),
+        )
+
+        expected = 'x Y1 b None a B2 C1 x y Y2 a b c B1 C1 e A3 A2 A2'
+
+        for tk in tokens:
+            parser.parse(tk)
+
+        res = parser.end()
+
+        self.assertEqual(res, expected)
+
+    def test_closing_empty_rule(self):
+        """
+        This test is meant to make sure that closure is built correctly internally.
+        When since END can be empty, after encountering c, the parser has to dig deeper to figure out that it must
+        reduce C1, END1, B1 when lookahead it e.
+        """
+
+        rules = {
+            'A': [('B e', get_string_of_instructions_reducer('A1'))],
+            'B': [('C END', get_string_of_instructions_reducer('B1'))],
+            'C': [('c', get_string_of_instructions_reducer('C1'))],
+            'END': [
+                ('', get_string_of_instructions_reducer('END1')),
+                ('end', get_string_of_instructions_reducer('END2'))
+            ]
+        }
+
+        parser = Parser(rules=rules, terminal='A')
+        parser.build()
+
+        tokens = generate_token_stream(('c', 'c'), ('e', 'e'))
+
+        for tk in tokens:
+            parser.parse(tk)
+
+        res = parser.end()
+        expected = 'c C1 END1 B1 e A1'
+
+        self.assertEqual(res, expected)
+
+    def test_sequence_of_empty_rules(self):
+
+        rules = {
+            'start': [('A B C', get_string_of_instructions_reducer('start1'))],
+            'A': [('', get_string_of_instructions_reducer('A1'))],
+            'B': [('', get_string_of_instructions_reducer('B1'))],
+            'C': [('c?', get_string_of_instructions_reducer('C1'))],
+        }
+
+        parser = Parser(rules=rules, terminal='start')
+        parser.build()
+
+        res = parser.end()
+        expected = 'A1 B1 None C1 start1'
+
+        self.assertEqual(res, expected)
+
+        parser.reset()
+
+        token = generate_token('c', 'c')
+        parser.parse(token)
+
+        res = parser.end()
+        expected = 'A1 B1 c C1 start1'
+
+        self.assertEqual(res, expected)
+
+    def test_multiple_terminals(self):
+        rules = {
+            'start': [('a b c', get_string_of_instructions_reducer('start1'))],
+            'other_start': [('b c d', get_string_of_instructions_reducer('other_start1'))]
+        }
+
+        parser = Parser(rules=rules, terminal=['start', 'other_start'])
+        parser.build()
+
+        start_stream = generate_token_stream(
+            ('a', 'a'),
+            ('b', 'b'),
+            ('c', 'c')
+        )
+
+        other_start_stream = generate_token_stream(
+            ('b', 'b'),
+            ('c', 'c'),
+            ('d', 'd')
+        )
+
+        for tk in start_stream:
+            parser.parse(tk)
+
+        res = parser.end()
+        expected = 'a b c start1'
+
+        self.assertEqual(res, expected)
+
+        parser.reset()
+
+        for tk in other_start_stream:
+            parser.parse(tk)
+
+        res = parser.end()
+        expected = 'b c d other_start1'
+
+        self.assertEqual(res, expected)
+
+    def test_multiple_overlapping_terminals(self):
+        rules = {
+            'start': [('a other_start', get_string_of_instructions_reducer('start1'))],
+            'other_start': [('b c', get_string_of_instructions_reducer('other_start1'))]
+        }
+
+        parser = Parser(rules=rules, terminal=['start', 'other_start'])
+        parser.build()
+
+        start_stream = generate_token_stream(
+            ('a', 'a'),
+            ('b', 'b'),
+            ('c', 'c')
+        )
+
+        other_start_stream = generate_token_stream(
+            ('b', 'b'),
+            ('c', 'c')
+        )
+
+        for tk in start_stream:
+            parser.parse(tk)
+
+        res = parser.end()
+        expected = 'a b c other_start1 start1'
+
+        self.assertEqual(res, expected)
+
+        parser.reset()
+
+        for tk in other_start_stream:
+            parser.parse(tk)
+
+        res = parser.end()
+        expected = 'b c other_start1'
+
+        self.assertEqual(res, expected)
 
 
 class ParserTestConflicts(unittest.TestCase):
@@ -337,9 +527,51 @@ class ParserTestBuild(unittest.TestCase):
 
         self.assertRaises(ParserException, Parser, rules=rules, terminal='A')
 
+    def test_must_build_before_parse(self):
+        rules = {
+            'dummy_rule': [('a b c', placeholder_reducer)]
+        }
+
+        parser = Parser(rules=rules, terminal='dummy_rule')
+
+        tk = generate_token('a')
+
+        self.assertRaises(ParserException, parser.parse, tk)
+
+    def test_must_build_before_end(self):
+        rules = {
+            'dummy_rule': [('a b c', placeholder_reducer)]
+        }
+
+        parser = Parser(rules=rules, terminal='dummy_rule')
+
+        self.assertRaises(ParserException, parser.end)
+
+
+class ParserTestReset(unittest.TestCase):
+
+    def test_reset(self):
+        rules = {
+            'start':  [('a b c', lambda *args: 'success')]
+        }
+
+        parser = Parser(rules=rules, terminal='start')
+        parser.build()
+
+        partial_stream = generate_token_stream('a', 'b')
+        full_stream = generate_token_stream('a', 'b', 'c')
+
+        for tk in partial_stream:
+            parser.parse(tk)
+
+        self.assertRaises(ParserSyntaxError, parser.end)
+        parser.reset()
+
+        for tk in full_stream:
+            parser.parse(tk)
+
+        self.assertEqual('success', parser.end())
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
-
-
-
-

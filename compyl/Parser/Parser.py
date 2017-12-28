@@ -10,6 +10,26 @@ class ParserException(Exception):
     pass
 
 
+# ======================================================================================================================
+# Parser decorators
+# ======================================================================================================================
+
+
+def _require_dfa_built(fn):
+    def wrapped_fn(self, *args, **kwargs):
+        if not self.dfa:
+            raise ParserException
+        else:
+            return fn(self, *args, **kwargs)
+
+    return wrapped_fn
+
+
+# ======================================================================================================================
+# Parser Main Class
+# ======================================================================================================================
+
+
 class Parser:
     def __init__(self, rules=None, terminal=None):
         self.rules = {}
@@ -56,6 +76,9 @@ class Parser:
         formatted_rules = format_rules(self.rules)
         self.dfa = DFA(formatted_rules, self.terminals)
 
+    def reset(self):
+        self.dfa.reset()
+
     def save(self, filename="lexer.p"):
         with open(filename, "wb") as file:
             dill.dump(self, file)
@@ -75,6 +98,7 @@ class Parser:
         else:
             raise ParserException("The unpickled object from " + path + " is not a Parser")
 
+    @_require_dfa_built
     def parse(self, token):
         if token:
             self.dfa.push(token)
@@ -82,8 +106,10 @@ class Parser:
         else:
             return self.end()
 
+    @_require_dfa_built
     def end(self):
         return self.dfa.end()
+
 
 # ======================================================================================================================
 # Rule formatting

@@ -233,20 +233,17 @@ class TmpNodeFiniteAutomaton:
     def add_shift(self, lookout, target_node):
         self.shifts[lookout] = target_node
 
-    def add_reduce(self, lookouts, reduce_len, reducer, token):
+    def add_reduce(self, lookout, reduce_len, reducer, token):
         reduce_element = {
             "reducer": reducer,
             "reduce_len": reduce_len,
             "token": token
         }
-        if lookouts is None:
-            lookouts = [None]
 
-        for lookout in lookouts:
-            if lookout in self.reduce:
-                self.reduce[lookout].append(reduce_element)
-            else:
-                self.reduce[lookout] = [reduce_element]
+        if lookout in self.reduce:
+            self.reduce[lookout].append(reduce_element)
+        else:
+            self.reduce[lookout] = [reduce_element]
 
     def accept(self, dfa_nodes):
         """
@@ -379,7 +376,7 @@ def add_reduces_to_node(node):
         reduce_len = lr_item.get_parsed_length()
         reducer = lr_item.reducer
 
-        node.add_reduce(lr_item.lookouts, reduce_len, reducer, lr_item.token)
+        node.add_reduce(lr_item.lookout, reduce_len, reducer, lr_item.token)
 
 
 def add_reduces_to_dfa(shift_only_dfa_nodes):
@@ -440,11 +437,11 @@ class Closure:
 
 
 class LrItem:
-    def __init__(self, parsed, expected, token, lookouts, reducer):
+    def __init__(self, parsed, expected, token, lookout, reducer):
         self.parsed = tuple(parsed)
         self.expected = tuple(expected)
         self.token = token
-        self.lookouts = lookouts
+        self.lookout = lookout
         self.reducer = reducer
 
     def __hash__(self):
@@ -453,7 +450,7 @@ class LrItem:
                 self.parsed,
                 self.expected,
                 self.token,
-                tuple(self.lookouts) if self.lookouts else None,
+                self.lookout,
                 self.reducer
             )
         )
@@ -462,27 +459,35 @@ class LrItem:
         return self.parsed == other.parsed and\
                 self.expected == other.expected and\
                 self.token == other.token and\
-                self.lookouts == other.lookouts and\
+                self.lookout == other.lookout and\
                 self.reducer == other.reducer
 
     def __lt__(self, other):
         if isinstance(other, LrItem):
-            t = self.to_tuple()
-            g = other.to_tuple()
-            return self.to_tuple() < other.to_tuple()
+            return self._to_tuple() < other._to_tuple()
 
         else:
             raise NotImplemented
 
     def __gt__(self, other):
         if isinstance(other, LrItem):
-            return self.to_tuple() > other.to_tuple()
+            return self._to_tuple() > other._to_tuple()
 
         else:
             raise NotImplemented
 
-    def to_tuple(self):
-        return self.parsed, self.expected, self.token, tuple(self.lookouts) if self.lookouts else tuple(), self.reducer
+    def _to_tuple(self):
+        """
+        Internal helper to inherit tuple ordering
+        This assumes following types:
+        self.parsed -> string
+        self.expected -> string
+        self.token -> string
+        self.lookout -> string or None
+        self.reducer -> function
+        """
+        # Hack: since lookout can be None, we need the empty tuple hack to make comparison work
+        return self.parsed, self.expected, self.token, (self.lookout,) if self.lookout else tuple(), self.reducer
 
     def is_fully_parsed(self):
         return False if self.expected else True
@@ -515,6 +520,7 @@ class LrItem:
                     rule = rules[token]
                     for sequence, _ in rule:
                         if not sequence:
+                            # The rule is nullable if it has an empty reduction
                             nullable = True
                         elif sequence[0] not in inspected_tokens:
                             tokens_to_inspect.append(sequence[0])
@@ -522,14 +528,23 @@ class LrItem:
                     # An atomic token is one that is not in the rules' keys
                     atomics.add(token)
 
-        return atomics, nullable
+            # If the rule is nullable, we recover the atomics from the next expected token
+            if nullable:
+                next_atomics = self.get_next_expected_atomics(rules, pos=pos+1)
+                atomics |= next_atomics
+
+        # If the position is out of range, return the item lookouts as atomics
+        else:
+            atomics.add(self.lookout)
+
+        return atomics
 
     def get_shifted_item(self):
         return LrItem(
             self.parsed + tuple([self.expected[0]]),
             self.expected[1:],
             self.token,
-            self.lookouts,
+            self.lookout,
             self.reducer
         )
 
@@ -565,22 +580,15 @@ def get_closure(initial_items, rules):
                 for rule, reducer in next_token_rules:
                     pos = 1
                     lookouts = set()
-                    atomics, nullable = item.get_next_expected_atomics(rules, pos)
+                    atomics = item.get_next_expected_atomics(rules, pos)
 
                     lookouts = lookouts.union(atomics)
 
-                    while nullable:
-                        pos += 1
-                        atomics, nullable = item.get_next_expected_atomics(rules, pos)
-                        lookouts = lookouts.union(atomics)
-
-                    if not lookouts:
-                        lookouts = item.lookouts
-
-                    new_item = LrItem([], rule, next_token, lookouts, reducer)
-                    if new_item not in seen_items:
-                        seen_items[new_item] = True
-                        next_pending_items.add(new_item)
+                    for lookout in lookouts:
+                        new_item = LrItem([], rule, next_token, lookout, reducer)
+                        if new_item not in seen_items:
+                            seen_items[new_item] = True
+                            next_pending_items.add(new_item)
 
         closure_set = closure_set.union(pending_items)
         pending_items = next_pending_items
