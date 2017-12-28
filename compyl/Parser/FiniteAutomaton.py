@@ -214,7 +214,7 @@ class TmpNodeFiniteAutomaton:
     Meant to accept conflicts.
     """
 
-    def __init__(self, closure=tuple(), counter=None):
+    def __init__(self, closure=None, counter=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
@@ -228,7 +228,7 @@ class TmpNodeFiniteAutomaton:
         self.reduce = {}
 
         # Parsing closure representation of the state
-        self.closure = tuple(closure)
+        self.closure = closure
 
     def add_shift(self, lookout, target_node):
         self.shifts[lookout] = target_node
@@ -407,6 +407,24 @@ def build_dfa(rules, terminal_tokens):
 # ======================================================================================================================
 
 
+class Closure:
+    def __init__(self, lr_items):
+        self.lr_items = tuple(sorted(lr_items))
+
+    def __eq__(self, other):
+        if isinstance(other, Closure):
+            return self.lr_items == other.lr_items
+
+        else:
+            return False
+
+    def __hash__(self):
+        return hash(self.lr_items)
+
+    def __getitem__(self, index):
+        return self.lr_items[index]
+
+
 class LrItem:
     def __init__(self, parsed, expected, token, lookouts, reducer):
         self.parsed = tuple(parsed)
@@ -427,7 +445,30 @@ class LrItem:
         )
 
     def __eq__(self, other):
-        return self.parsed == other.parsed and self.expected == other.expected
+        return self.parsed == other.parsed and\
+                self.expected == other.expected and\
+                self.token == other.token and\
+                self.lookouts == other.lookouts and\
+                self.reducer == other.reducer
+
+    def __lt__(self, other):
+        if isinstance(other, LrItem):
+            t = self.to_tuple()
+            g = other.to_tuple()
+            return self.to_tuple() < other.to_tuple()
+
+        else:
+            raise NotImplemented
+
+    def __gt__(self, other):
+        if isinstance(other, LrItem):
+            return self.to_tuple() > other.to_tuple()
+
+        else:
+            raise NotImplemented
+
+    def to_tuple(self):
+        return self.parsed, self.expected, self.token, tuple(self.lookouts) if self.lookouts else tuple(), self.reducer
 
     def is_fully_parsed(self):
         return False if self.expected else True
@@ -491,7 +532,7 @@ def get_closure(initial_items, rules):
     :param rules: Parsed rules
     :return: Closure as tuple of LR_Item's
     """
-    closure = set()
+    closure_set = set()
     pending_items = set(initial_items)
     seen_items = {}
 
@@ -527,7 +568,7 @@ def get_closure(initial_items, rules):
                         seen_items[new_item] = True
                         next_pending_items.add(new_item)
 
-        closure = closure.union(pending_items)
+        closure_set = closure_set.union(pending_items)
         pending_items = next_pending_items
 
-    return tuple(closure)
+    return Closure(closure_set)

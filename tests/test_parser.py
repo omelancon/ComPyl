@@ -265,7 +265,6 @@ class ParserTestConflicts(unittest.TestCase):
             self.assertTrue(False, msg='Parser did not detect shift/reduce conflict')
 
         except GrammarError as e:
-            # The length is not deterministic
             self.assertEqual(len(e.conflicts), 8)
             for c in e.conflicts:
                 self.assertTrue(c.is_shift_reduce())
