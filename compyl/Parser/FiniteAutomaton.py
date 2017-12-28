@@ -310,13 +310,13 @@ def build_initial_node(rules, terminal_tokens):
     )
 
 
-def get_items_with_lookout(lookout, lf_items):
+def get_items_with_lookout(lookout, lr_items):
     """
     :param lookout: token (string)
-    :param lf_items: list of LfItem's
-    :return: filtered list of LfItem which accept lookout
+    :param lr_items: list of LrItem's
+    :return: filtered list of LrItem which accept lookout
     """
-    return list(filter(lambda item: item.is_lookout_accepted(lookout), lf_items))
+    return list(filter(lambda item: item.is_lookout_accepted(lookout), lr_items))
 
 
 def build_dfa_shifts(rules, terminal_tokens):
@@ -336,23 +336,23 @@ def build_dfa_shifts(rules, terminal_tokens):
     while pending_nodes:
         node = pending_nodes.pop(0)
 
-        lf_items = copy(node.closure)
+        lr_items = copy(node.closure)
 
-        while lf_items:
-            item = lf_items[0]
+        while lr_items:
+            item = lr_items[0]
 
             if item.is_fully_parsed():
-                # Case where the LF item cannot shift
-                lf_items = lf_items[1:]
+                # Case where the LR item cannot shift
+                lr_items = lr_items[1:]
             else:
-                # Case where LF item can shift
+                # Case where LR item can shift
 
                 # Recover the token/lookout with which the item can shift
                 lookout = item.get_next_expected_token()
-                same_lookout_items = get_items_with_lookout(lookout, lf_items)
+                same_lookout_items = get_items_with_lookout(lookout, lr_items)
 
                 # We will treat the items which accept that lookout, so remove them from pending items
-                lf_items = [item for item in lf_items if item not in same_lookout_items]
+                lr_items = [item for item in lr_items if item not in same_lookout_items]
 
                 # Shift the items and create the closure
                 shifted_items = [item.get_shifted_item() for item in same_lookout_items]
@@ -422,7 +422,21 @@ class Closure:
         return hash(self.lr_items)
 
     def __getitem__(self, index):
-        return self.lr_items[index]
+        lr_items = self.lr_items[index]
+
+        if isinstance(lr_items, tuple):
+            # Wrap the slice of the lr_items in a new Closure
+            return Closure(lr_items)
+
+        else:
+            # If single element, return it
+            return lr_items
+
+    def __len__(self):
+        return len(self.lr_items)
+
+    def __bool__(self):
+        return bool(self.lr_items)
 
 
 class LrItem:
