@@ -214,7 +214,7 @@ class TmpNodeFiniteAutomaton:
     Meant to accept conflicts.
     """
 
-    def __init__(self, closure=tuple(), counter=None):
+    def __init__(self, closure=None, counter=None):
         # A counter can be provided to give ordered unique ids for the states, otherwise we generate them
         self.id = counter.next() if counter else id(self)
 
@@ -228,7 +228,7 @@ class TmpNodeFiniteAutomaton:
         self.reduce = {}
 
         # Parsing closure representation of the state
-        self.closure = tuple(closure)
+        self.closure = closure
 
     def add_shift(self, lookout, target_node):
         self.shifts[lookout] = target_node
@@ -310,13 +310,13 @@ def build_initial_node(rules, terminal_tokens):
     )
 
 
-def get_items_with_lookout(lookout, lf_items):
+def get_items_with_lookout(lookout, lr_items):
     """
     :param lookout: token (string)
-    :param lf_items: list of LfItem's
-    :return: filtered list of LfItem which accept lookout
+    :param lr_items: list of LrItem's
+    :return: filtered list of LrItem which accept lookout
     """
-    return list(filter(lambda item: item.is_lookout_accepted(lookout), lf_items))
+    return list(filter(lambda item: item.is_lookout_accepted(lookout), lr_items))
 
 
 def build_dfa_shifts(rules, terminal_tokens):
@@ -336,23 +336,23 @@ def build_dfa_shifts(rules, terminal_tokens):
     while pending_nodes:
         node = pending_nodes.pop(0)
 
-        lf_items = copy(node.closure)
+        lr_items = copy(node.closure)
 
-        while lf_items:
-            item = lf_items[0]
+        while lr_items:
+            item = lr_items[0]
 
             if item.is_fully_parsed():
-                # Case where the LF item cannot shift
-                lf_items = lf_items[1:]
+                # Case where the LR item cannot shift
+                lr_items = lr_items[1:]
             else:
-                # Case where LF item can shift
+                # Case where LR item can shift
 
                 # Recover the token/lookout with which the item can shift
                 lookout = item.get_next_expected_token()
-                same_lookout_items = get_items_with_lookout(lookout, lf_items)
+                same_lookout_items = get_items_with_lookout(lookout, lr_items)
 
                 # We will treat the items which accept that lookout, so remove them from pending items
-                lf_items = [item for item in lf_items if item not in same_lookout_items]
+                lr_items = [item for item in lr_items if item not in same_lookout_items]
 
                 # Shift the items and create the closure
                 shifted_items = [item.get_shifted_item() for item in same_lookout_items]
@@ -407,6 +407,38 @@ def build_dfa(rules, terminal_tokens):
 # ======================================================================================================================
 
 
+class Closure:
+    def __init__(self, lr_items):
+        self.lr_items = tuple(sorted(lr_items))
+
+    def __eq__(self, other):
+        if isinstance(other, Closure):
+            return self.lr_items == other.lr_items
+
+        else:
+            return False
+
+    def __hash__(self):
+        return hash(self.lr_items)
+
+    def __getitem__(self, index):
+        lr_items = self.lr_items[index]
+
+        if isinstance(lr_items, tuple):
+            # Wrap the slice of the lr_items in a new Closure
+            return Closure(lr_items)
+
+        else:
+            # If single element, return it
+            return lr_items
+
+    def __len__(self):
+        return len(self.lr_items)
+
+    def __bool__(self):
+        return bool(self.lr_items)
+
+
 class LrItem:
     def __init__(self, parsed, expected, token, lookouts, reducer):
         self.parsed = tuple(parsed)
@@ -427,7 +459,30 @@ class LrItem:
         )
 
     def __eq__(self, other):
-        return self.parsed == other.parsed and self.expected == other.expected
+        return self.parsed == other.parsed and\
+                self.expected == other.expected and\
+                self.token == other.token and\
+                self.lookouts == other.lookouts and\
+                self.reducer == other.reducer
+
+    def __lt__(self, other):
+        if isinstance(other, LrItem):
+            t = self.to_tuple()
+            g = other.to_tuple()
+            return self.to_tuple() < other.to_tuple()
+
+        else:
+            raise NotImplemented
+
+    def __gt__(self, other):
+        if isinstance(other, LrItem):
+            return self.to_tuple() > other.to_tuple()
+
+        else:
+            raise NotImplemented
+
+    def to_tuple(self):
+        return self.parsed, self.expected, self.token, tuple(self.lookouts) if self.lookouts else tuple(), self.reducer
 
     def is_fully_parsed(self):
         return False if self.expected else True
@@ -491,7 +546,7 @@ def get_closure(initial_items, rules):
     :param rules: Parsed rules
     :return: Closure as tuple of LR_Item's
     """
-    closure = set()
+    closure_set = set()
     pending_items = set(initial_items)
     seen_items = {}
 
@@ -527,7 +582,7 @@ def get_closure(initial_items, rules):
                         seen_items[new_item] = True
                         next_pending_items.add(new_item)
 
-        closure = closure.union(pending_items)
+        closure_set = closure_set.union(pending_items)
         pending_items = next_pending_items
 
-    return tuple(closure)
+    return Closure(closure_set)
