@@ -1,10 +1,12 @@
 import copy
 import re
+from collections import OrderedDict
 
 from compyl.Lexer.IntervalOperations import inverse_intervals_list, merge_intervals
 
+
 # ======================================================================================================================
-# Tokenize RegExp.py
+# Tokenize RegExp
 # ======================================================================================================================
 
 # In this module are the tools that take a regular expression as string and transform it to a bare-bone format.
@@ -154,6 +156,7 @@ class RegexpTree:
         Return a tuple of int, the first element is the minimal length of the the regexp, the second is the maximal
         length of the regexp
         """
+
         def get_length(rg):
             # Used to handle the None
             return rg.length() if rg else (0, 0)
@@ -624,3 +627,226 @@ def reduce_interval_list_to_regexp_tree_union(intervals, next=None):
             reduce_interval_list_to_regexp_tree_union(intervals[1:]),
             next
         )
+
+
+# ======================================================================================================================
+# RegExp Dummy Parser
+# ======================================================================================================================
+
+class Tokenizer:
+    global_rules = [
+        (EscapeSequence, r'\\[sSwWdD]'),
+        (StandardEscape, r'\\[abfnrtv]'),
+        (HexEscape, r'\\x[0-9a-fA-F]{2}'),
+        (CharEscape, r'\\_'),
+        (Dot, r'\.'),
+        (Any, r'\_'),
+        (Plus, r'\+'),
+        (Star, r'\*'),
+        (Optional, r'\?'),
+        (RepetitionRange, r'\{\s*[1-9][0-9]*\s*,\s*[1-9][0-9]*\s*\}'),
+        (RepetitionExact, r'\{\s*[1-9][0-9]*\s\}'),
+        (LPar, r'\('),
+        (RPar, r'\)'),
+        (Set, r'\[(?:\\.|[^]\\])*\]'),
+        (InverseSet, r'\[\^(?:\\.|[^]\\])*\]'),
+        (Union, r'\|'),
+        (Char, r'_'),
+    ]
+
+    inner_set_rules = [
+        (EscapeSequence, r'\\[sSwWdD]'),
+        (StandardEscape, r'\\[abfnrtv]'),
+        (HexEscape, r'\\x[0-9a-fA-F]{2}'),
+        (CharEscape, r'\\_'),
+        (Dash, r'-'),
+        (Char, r'_'),
+    ]
+
+    @classmethod
+    def match(cls, regexp, where=None):
+        if where == 'set':
+            rules = cls.inner_set_rules
+        else:
+            rules = cls.global_rules
+
+        for token_cls, r in rules:
+            match = r.match(regexp)
+            if match:
+                value = match.group()
+                return token_cls(value), len(value)
+        else:
+            raise RegexpParsingException
+
+    @classmethod
+    def tokenize(cls, regexp, where=None):
+        tokens = []
+        while regexp:
+            tk, length = cls.match(regexp, where)
+            regexp = regexp[length + 1:]
+            tokens.append(tk)
+
+        return tokens
+
+
+class Token:
+    pass
+
+
+class Char(Token):
+    def __init__(self, value):
+        self.ascii = value if isinstance(value, int) else ord(value)
+
+    @property
+    def intervals(self):
+        return [(self.ascii, self.ascii)]
+
+
+class StandardEscape(Char):
+    escape = {
+        "a": "\a",
+        "b": "\b",
+        "f": "\f",
+        "n": "\n",
+        "r": "\r",
+        "t": "\t",
+        "v": "\v"
+    }
+
+    def __init__(self, value):
+        super().__init__(self.escape[value[1]])
+
+
+class CharEscape(Char):
+    def __init__(self, value):
+        super().__init__(value[1])
+
+
+class HexEscape(Char):
+    def __init__(self, value):
+        super().__init__(int(value[2:], 16))
+
+
+class CharSet(Token):
+    def __init__(self, *intervals):
+        self.intervals = intervals
+
+
+class EscapeSequence(CharSet):
+
+    escape = {
+        's': [(9, 13), (32, 32)],
+        'S': [(0, 8), (14, 31), (33, 255)],
+        'w': [(48, 57), (65, 90), (95, 95), (97, 122)],
+        'W': [(0, 47), (58, 64), (91, 94), (96, 96), (123, 255)],
+        'd': [(48, 57)],
+        'D': [(0, 47), (58, 255)],
+    }
+
+    def __init__(self, value):
+        super().__init__(*self.escape[value[1]])
+
+
+class Dot(CharSet):
+    def __init__(self, value):
+        super().__init__(*[(0, 9), (11, 255)])
+
+
+class Any(CharSet):
+    def __init__(self, value):
+        super().__init__((0, 255))
+
+
+class Set(CharSet):
+    def __init__(self, value):
+        inner = value[1:-1]
+        tokens = self._parse_intervals(
+            Tokenizer.tokenize(inner, where='set')
+        )
+
+        raise NotImplementedError
+
+        intervals = []
+        super().__init__(intervals)
+
+    @staticmethod
+    def _parse_intervals(tokens):
+        parsed_tokens = []
+        pos = 0
+
+        while pos < len(tokens):
+            tk = tokens[pos]
+
+            if isinstance(tk, Dash):
+                try:
+                    last = parsed_tokens.pop()
+                    next = tokens[pos + 1]
+                except IndexError:
+                    raise RegexpParsingException
+
+                if isinstance(last, Char) and isinstance(next, Char) and last.ascii <= next.ascii:
+                    parsed_tokens.append(
+                        CharSet((last.ascii, next.ascii))
+                    )
+                else:
+                    raise RegexpParsingException
+
+                pos += 2
+            else:
+                parsed_tokens.append(tk)
+                pos += 1
+
+        return parsed_tokens
+
+
+class InverseSet(CharSet):
+    pass
+
+
+class Repetition(Token):
+    def __init__(self, min, max=None):
+        self.min = min
+        self.max = max
+
+
+class RepetitionExact(Repetition):
+    def __init__(self, value):
+        n = int(value[1:-1])
+        super().__init__(n, n)
+
+
+class RepetitionRange(Repetition):
+    def __init__(self, value):
+        min, max = [int(x) for x in value[1:-1].split(',')]
+        super().__init__(min, max)
+
+
+class Star(Repetition):
+    def __init__(self, value):
+        super().__init__(0, None)
+
+
+class Plus(Repetition):
+    def __init__(self, value):
+        super().__init__(1, None)
+
+
+class Optional(Repetition):
+    def __init__(self, value):
+        super().__init__(0, 1)
+
+
+class LPar(Token):
+    pass
+
+
+class RPar(Token):
+    pass
+
+
+class Union(Token):
+    pass
+
+
+class Dash(Token):
+    pass
