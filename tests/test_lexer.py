@@ -5,6 +5,9 @@ from compyl.Lexer.Lexer import Lexer, LexerError
 from compyl.Lexer.FiniteAutomaton import FiniteAutomatonError
 
 
+FAIL = False
+
+
 def get_token_stream(lexer, buffer):
     lexer.read(buffer)
     tk_list = []
@@ -24,6 +27,14 @@ def get_token_stream_types(lexer, buffer):
 
 def get_token_stream_values(lexer, buffer):
     return [tk.value for tk in get_token_stream(lexer, buffer)]
+
+
+def test_regexp_on_buffer(regexp, buffer):
+    rules = [(regexp, 'placeholder')]
+    lexer = Lexer(rules=rules)
+    lexer.build()
+
+    return get_token_stream_values(lexer, buffer)
 
 
 class LexerTestBasic(unittest.TestCase):
@@ -268,7 +279,7 @@ class LexerTestRegexp(unittest.TestCase):
         self.assertEqual(tk.value, 'aaa')
         self.assertRaises(LexerError, lexer.lex)
 
-    def test_match_amount(self):
+    def test_match_min_max_amount(self):
         rules = [
             (r'a{2, 3}x', 'THREE_A')
         ]
@@ -417,7 +428,86 @@ class LexerTestRegexp(unittest.TestCase):
 class LexerTestRegexpPriority(unittest.TestCase):
 
     def test_priority(self):
-        raise NotImplementedError
+        """
+        Challenge the RegExp module on various corner case of regexp operation priority
+        """
+
+        expected_rule_buffer_outputs = [
+            (r'abc|def', 'abc', ['abc']),
+            (r'abc|def', 'def', ['def']),
+            (r'abc|def', 'abdef', FAIL),
+            (r'ab(c|d)ef', 'abcef', ['abcef']),
+            (r'ab(c|d)ef', 'abc', FAIL),
+            (r'ab(c|d)ef', 'def', FAIL),
+            (r'a|b+', 'a', ['a']),
+            (r'a|b+', 'b', ['b']),
+            (r'a|b+', 'bb', ['bb']),
+            (r'a|b+', 'bbb', ['bbb']),
+            (r'a|b+', 'aa', ['a', 'a']),
+            (r'a+|b+', 'aaa', ['aaa']),
+            (r'a+|b+', 'bb', ['bb']),
+            (r'a+|b+', 'aabb', ['aa', 'bb']),
+            (r'(a|b)+', 'a', ['a']),
+            (r'(a|b)+', 'b', ['b']),
+            (r'(a|b)+', 'aba', ['aba']),
+            (r'ab{1,3}', 'ab', ['ab']),
+            (r'ab{1,3}', 'abb', ['abb']),
+            (r'ab{1,3}', 'abbb', ['abbb']),
+            (r'ab{1,3}', 'abbbb', FAIL),
+            (r'(a|b){1,2}', 'ab', ['ab']),
+            (r'(a|b){1,2}', 'ba', ['ba']),
+            (r'(a|b){1,2}', 'b', ['b']),
+            (r'(a|b){1,2}', 'aaa', ['aa', 'a']),
+            (r'a{2}+', 'aa', ['aa']),
+            (r'a{2}+', 'aaaa', ['aaaa']),
+            (r'a+{2}', 'aa', ['aa']),
+            (r'a+{2}', 'aaa', ['aaa']),
+            (r'a+{2}', 'a', FAIL),
+            (r'(a*b)+', 'bbabaab', ['bbabaab']),
+            (r'[a-z][A-Z]+', 'xXX', ['xXX']),
+            (r'[a-z][A-Z]+', 'xXxXX', ['xX', 'xXX']),
+            (r'([a-z][A-Z])+', 'xXxX', ['xXxX']),
+            (r'([a-z][A-Z])+', 'xXX', FAIL),
+            (r'([a-z][A-Z])+', 'XxX', FAIL),
+            (r'a([bc]d)*', 'abd', ['abd']),
+            (r'a([bc]d)*', 'a', ['a']),
+            (r'a([bc]d)*', 'abdcdbd', ['abdcdbd']),
+            (r'a([bc]d)*', 'abdacdbd', ['abd', 'acdbd']),
+            (r'a([bc]d)*', 'add', FAIL),
+            (r'a([bc]d)*', 'abc', FAIL),
+            (r'a|b|c', 'a', ['a']),
+            (r'a|b|c', 'b', ['b']),
+            (r'a|b|c', 'c', ['c']),
+            (r'a|b|c', 'ac', ['a', 'c']),
+            (r'(a|b)|c', 'a', ['a']),
+            (r'(a|b)|c', 'b', ['b']),
+            (r'(a|b)|c', 'c', ['c']),
+            (r'(a|b)|c', 'ac', ['a', 'c']),
+            (r'xa?|bc', 'x', ['x']),
+            (r'xa?|bc', 'xa', ['xa']),
+            (r'xa?|bc', 'bc', ['bc']),
+            (r'xa?|bc', 'xbc', ['x', 'bc']),
+            (r'[^\W]\++(j|l?)?', 'a+', ['a+']),
+            (r'[^\W]\++(j|l?)?', 'b++j', ['b++j']),
+            (r'[^\W]\++(j|l?)?', 'c+++l', ['c+++l']),
+            (r'[^\W]\++(j|l?)?', 'a+a+', ['a+', 'a+']),
+            (r'[^\W]\++(j|l?)?', 'a+ja+', ['a+j', 'a+']),
+            (r'[^\W]\++(j|l?)?', '$+j', FAIL),
+            (r'[^\W]\++(j|l?)?', 'w+jl', FAIL),
+        ]
+
+        for rules, buffer, expected in expected_rule_buffer_outputs:
+            if expected is not FAIL:
+                self.assertEqual(
+                    test_regexp_on_buffer(rules, buffer),
+                    expected
+                )
+            else:
+                self.assertRaises(
+                    LexerError,
+                    test_regexp_on_buffer, rules, buffer
+                )
+
 
 
 class LexerTestTerminalAction(unittest.TestCase):
@@ -532,7 +622,7 @@ class LexerTestBuild(unittest.TestCase):
 
     def test_regexp_minimum_length(self):
         rules = [
-            ('a*', 'A')
+            (r'a*', 'A')
         ]
 
         lexer = Lexer(rules=rules)
@@ -541,7 +631,7 @@ class LexerTestBuild(unittest.TestCase):
 
     def test_special_action_choices(self):
         rules = [
-            ('a', 'A', 'foo')
+            (r'a', 'A', 'foo')
         ]
 
         lexer = Lexer(rules=rules)
