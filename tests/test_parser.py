@@ -573,5 +573,21 @@ class ParserTestReset(unittest.TestCase):
         self.assertEqual('success', parser.end())
 
 
+class ParserTestSave(ParserTestBasic):
+    """
+    Rerun the tests from LexerTestBasic but by saving and loading the created lexer before tests
+    """
+    parser_filename = "test_parser_save.p"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        cls.parser.save(cls.parser_filename)
+
+    def tearDown(self):
+        self.__class__.parser = Parser.load(self.parser_filename)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
