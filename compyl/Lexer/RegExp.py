@@ -100,22 +100,22 @@ class RegexpTree:
                 'single',
                 self.min_ascii,
                 self.max_ascii,
-                self.next.__deepcopy__({}) if self.next else None
+                copy.deepcopy(self.next)
             )
 
         elif self.type == 'union':
             dup = RegexpTree(
                 'union',
-                self.fst.__deepcopy__({}),
-                self.snd.__deepcopy__({}),
-                self.next.__deepcopy__({}) if self.next else None
+                copy.deepcopy(self.fst),
+                copy.deepcopy(self.snd),
+                copy.deepcopy(self.next)
             )
 
         elif self.type == 'kleene':
             dup = RegexpTree(
                 'kleene',
-                self.pattern.__deepcopy__({}),
-                self.next.__deepcopy__({}) if self.next else None
+                copy.deepcopy(self.pattern),
+                copy.deepcopy(self.next)
             )
 
         return dup
