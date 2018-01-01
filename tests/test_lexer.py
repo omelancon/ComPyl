@@ -268,7 +268,7 @@ class LexerTestRegexp(unittest.TestCase):
         self.assertEqual(tk.value, 'aaa')
         self.assertRaises(LexerError, lexer.lex)
 
-    def test_match_amount(self):
+    def test_match_min_max_amount(self):
         rules = [
             (r'a{2, 3}x', 'THREE_A')
         ]
@@ -532,7 +532,7 @@ class LexerTestBuild(unittest.TestCase):
 
     def test_regexp_minimum_length(self):
         rules = [
-            ('a*', 'A')
+            (r'a*', 'A')
         ]
 
         lexer = Lexer(rules=rules)
@@ -541,7 +541,7 @@ class LexerTestBuild(unittest.TestCase):
 
     def test_special_action_choices(self):
         rules = [
-            ('a', 'A', 'foo')
+            (r'a', 'A', 'foo')
         ]
 
         lexer = Lexer(rules=rules)

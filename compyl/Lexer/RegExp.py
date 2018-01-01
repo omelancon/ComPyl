@@ -2,7 +2,7 @@ import copy
 import re
 from collections import OrderedDict
 
-from compyl.Lexer.IntervalOperations import inverse_intervals_list, merge_intervals
+from compyl.Lexer.IntervalOperations import inverse_intervals_list, merge_intervals, get_minimal_covering_intervals
 
 
 # ======================================================================================================================
@@ -213,16 +213,7 @@ def format_regexp(regexp):
     """
     Parse a regular expression and return it as a RegexpTree object
     """
-    nodes_list = regexp_to_regexp_tree_list(regexp)
-
-    regexp_tree = nodes_list.pop(0) if nodes_list else None
-    last = regexp_tree
-
-    while nodes_list:
-        last.extend(nodes_list.pop(0))
-        last = last.next
-
-    return regexp_tree
+    return Parser.parse(regexp)
 
 
 def regexp_to_regexp_tree_list(regexp, pos=0):
@@ -568,7 +559,7 @@ def repeat_regexptree(node, min, max):
         min -= 1
         max -= 1
 
-    else:
+    elif max < float('inf'):
         last = copy.deepcopy(node)
         first = RegexpTree(
             'union',
@@ -577,6 +568,12 @@ def repeat_regexptree(node, min, max):
         )
         max -= 1
 
+    else:
+        return RegexpTree(
+            'kleene',
+            copy.deepcopy(node)
+        )
+
     while min > 0:
         extension = copy.deepcopy(node)
         last.extend(extension)
@@ -584,7 +581,7 @@ def repeat_regexptree(node, min, max):
         min -= 1
         max -= 1
 
-    while max > 0:
+    while 0 < max < float('inf'):
         extension_snd = copy.deepcopy(node)
         extension = RegexpTree(
             'union',
@@ -595,6 +592,11 @@ def repeat_regexptree(node, min, max):
         last = extension_snd
 
         max -= 1
+
+    if max == float('inf'):
+        first.extend(
+            RegexpTree('kleene', copy.deepcopy(node))
+        )
 
     return first
 
@@ -633,61 +635,6 @@ def reduce_interval_list_to_regexp_tree_union(intervals, next=None):
 # RegExp Dummy Parser
 # ======================================================================================================================
 
-class Tokenizer:
-    global_rules = [
-        (EscapeSequence, r'\\[sSwWdD]'),
-        (StandardEscape, r'\\[abfnrtv]'),
-        (HexEscape, r'\\x[0-9a-fA-F]{2}'),
-        (CharEscape, r'\\_'),
-        (Dot, r'\.'),
-        (Any, r'\_'),
-        (Plus, r'\+'),
-        (Star, r'\*'),
-        (Optional, r'\?'),
-        (RepetitionRange, r'\{\s*[1-9][0-9]*\s*,\s*[1-9][0-9]*\s*\}'),
-        (RepetitionExact, r'\{\s*[1-9][0-9]*\s\}'),
-        (LPar, r'\('),
-        (RPar, r'\)'),
-        (Set, r'\[(?:\\.|[^]\\])*\]'),
-        (InverseSet, r'\[\^(?:\\.|[^]\\])*\]'),
-        (Union, r'\|'),
-        (Char, r'_'),
-    ]
-
-    inner_set_rules = [
-        (EscapeSequence, r'\\[sSwWdD]'),
-        (StandardEscape, r'\\[abfnrtv]'),
-        (HexEscape, r'\\x[0-9a-fA-F]{2}'),
-        (CharEscape, r'\\_'),
-        (Dash, r'-'),
-        (Char, r'_'),
-    ]
-
-    @classmethod
-    def match(cls, regexp, where=None):
-        if where == 'set':
-            rules = cls.inner_set_rules
-        else:
-            rules = cls.global_rules
-
-        for token_cls, r in rules:
-            match = r.match(regexp)
-            if match:
-                value = match.group()
-                return token_cls(value), len(value)
-        else:
-            raise RegexpParsingException
-
-    @classmethod
-    def tokenize(cls, regexp, where=None):
-        tokens = []
-        while regexp:
-            tk, length = cls.match(regexp, where)
-            regexp = regexp[length + 1:]
-            tokens.append(tk)
-
-        return tokens
-
 
 class Token:
     pass
@@ -700,6 +647,9 @@ class Char(Token):
     @property
     def intervals(self):
         return [(self.ascii, self.ascii)]
+
+    def to_regexp_tree(self):
+        return RegexpTree('single', self.ascii, self.ascii)
 
 
 class StandardEscape(Char):
@@ -729,8 +679,24 @@ class HexEscape(Char):
 
 class CharSet(Token):
     def __init__(self, *intervals):
-        self.intervals = intervals
+        self.intervals = get_minimal_covering_intervals(list(intervals))
 
+    def to_regexp_tree(self):
+        return self._get_intervals_union(copy.copy(self.intervals))
+
+    @classmethod
+    def _get_intervals_union(cls, intervals):
+        fst = intervals.pop(0)
+
+        if len(intervals) == 0:
+            return RegexpTree('single', *fst)
+
+        else:
+            return RegexpTree(
+                'union',
+                RegexpTree('single', *fst),
+                cls._get_intervals_union(intervals)
+            )
 
 class EscapeSequence(CharSet):
 
@@ -759,18 +725,21 @@ class Any(CharSet):
 
 class Set(CharSet):
     def __init__(self, value):
-        inner = value[1:-1]
-        tokens = self._parse_intervals(
+        inner = self.get_inner_set(value)
+        tokens = self._parse_set(
             Tokenizer.tokenize(inner, where='set')
         )
 
-        raise NotImplementedError
+        intervals = [interval for tk in tokens for interval in tk.intervals]
 
-        intervals = []
-        super().__init__(intervals)
+        super().__init__(*intervals)
 
     @staticmethod
-    def _parse_intervals(tokens):
+    def get_inner_set(value):
+        return value[1:-1]
+
+    @staticmethod
+    def _parse_set(tokens):
         parsed_tokens = []
         pos = 0
 
@@ -799,12 +768,18 @@ class Set(CharSet):
         return parsed_tokens
 
 
-class InverseSet(CharSet):
-    pass
+class InverseSet(Set):
+    def __init__(self, value):
+        super().__init__(value)
+        self.intervals = inverse_intervals_list(self.intervals)
+
+    @staticmethod
+    def get_inner_set(value):
+        return value[2:-1]
 
 
 class Repetition(Token):
-    def __init__(self, min, max=None):
+    def __init__(self, min, max):
         self.min = min
         self.max = max
 
@@ -823,12 +798,12 @@ class RepetitionRange(Repetition):
 
 class Star(Repetition):
     def __init__(self, value):
-        super().__init__(0, None)
+        super().__init__(0, float('inf'))
 
 
 class Plus(Repetition):
     def __init__(self, value):
-        super().__init__(1, None)
+        super().__init__(1, float('inf'))
 
 
 class Optional(Repetition):
@@ -836,17 +811,148 @@ class Optional(Repetition):
         super().__init__(0, 1)
 
 
-class LPar(Token):
+class Operator(Token):
+    def __init__(self, value):
+        pass
+
+
+class LPar(Operator):
     pass
 
 
-class RPar(Token):
+class RPar(Operator):
     pass
 
 
-class Union(Token):
+class Union(Operator):
     pass
 
 
-class Dash(Token):
+class Dash(Operator):
     pass
+
+
+class Tokenizer:
+    global_rules = [
+        (EscapeSequence, r'\\[sSwWdD]'),
+        (StandardEscape, r'\\[abfnrtv]'),
+        (HexEscape, r'\\x[0-9a-fA-F]{2}'),
+        (CharEscape, r'\\.'),
+        (Dot, r'\.'),
+        (Any, r'\_'),
+        (Plus, r'\+'),
+        (Star, r'\*'),
+        (Optional, r'\?'),
+        (RepetitionRange, r'\{\s*[1-9][0-9]*\s*,\s*[1-9][0-9]*\s*\}'),
+        (RepetitionExact, r'\{\s*[1-9][0-9]*\s*\}'),
+        (LPar, r'\('),
+        (RPar, r'\)'),
+        (InverseSet, r'\[\^(?:\\.|[^]\\])*\]'),
+        (Set, r'\[(?:\\.|[^]\\])*\]'),
+        (Union, r'\|'),
+        (Char, r'.'),
+    ]
+
+    inner_set_rules = [
+        (EscapeSequence, r'\\[sSwWdD]'),
+        (StandardEscape, r'\\[abfnrtv]'),
+        (HexEscape, r'\\x[0-9a-fA-F]{2}'),
+        (CharEscape, r'\\_'),
+        (Dash, r'-'),
+        (Char, r'.'),
+    ]
+
+    @classmethod
+    def match(cls, regexp, where=None):
+        if where == 'set':
+            rules = cls.inner_set_rules
+        else:
+            rules = cls.global_rules
+
+        for token_cls, r in rules:
+            r = re.compile(r, re.DOTALL)
+            match = r.match(regexp)
+            if match:
+                value = match.group()
+                return token_cls(value), len(value)
+        else:
+            raise RegexpParsingException
+
+    @classmethod
+    def tokenize(cls, regexp, where=None):
+        tokens = []
+        while regexp:
+            tk, length = cls.match(regexp, where)
+            regexp = regexp[length:]
+            tokens.append(tk)
+
+        return tokens
+
+
+class Parser:
+    @classmethod
+    def parse(cls, regexp):
+        tokens = Tokenizer.tokenize(regexp)
+
+        return cls._parse(tokens, top_level=True)
+
+    @classmethod
+    def _concat_nodes(cls, nodes):
+        start = nodes[0] if nodes else None
+
+        for node in nodes[1:]:
+            start.extend(node)
+
+        return start
+
+    @classmethod
+    def _parse(cls, tokens, top_level=False):
+
+        regexp_nodes = []
+
+        while tokens:
+
+            tk = tokens.pop(0)
+
+            if isinstance(tk, (Char, CharSet)):
+                regexp_nodes.append(
+                    tk.to_regexp_tree()
+                )
+
+            elif isinstance(tk, LPar):
+                regexp_nodes.append(
+                    cls._parse(tokens)
+                )
+
+            elif isinstance(tk, RPar):
+                if top_level:
+                    raise RegexpParsingException
+                else:
+                    return cls._concat_nodes(regexp_nodes)
+
+            elif isinstance(tk, Repetition):
+                try:
+                    repeated_node = regexp_nodes.pop()
+                except IndexError:
+                    raise RegexpParsingException
+
+                regexp_nodes.append(
+                    repeat_regexptree(repeated_node, tk.min, tk.max)
+                )
+
+            elif isinstance(tk, Union):
+                return RegexpTree(
+                    'union',
+                    cls._concat_nodes(regexp_nodes),
+                    cls._parse(tokens, top_level=top_level)
+                )
+
+            else:
+                raise RegexpParsingException
+
+        # Consumed all tokens, return only if out of parentheses
+        if top_level:
+            return cls._concat_nodes(regexp_nodes)
+        else:
+            raise RegexpParsingException
+
