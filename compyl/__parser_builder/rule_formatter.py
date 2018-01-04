@@ -1,119 +1,7 @@
 import copy
-import dill
 import re
 
-from compyl.Parser.FiniteAutomaton import DFA
-from compyl.Parser.GrammarError import GrammarError, ReduceCycle
-
-
-class ParserException(Exception):
-    pass
-
-
-# ======================================================================================================================
-# Parser decorators
-# ======================================================================================================================
-
-
-def _require_dfa_built(fn):
-    def wrapped_fn(self, *args, **kwargs):
-        if not self.dfa:
-            raise ParserException
-        else:
-            return fn(self, *args, **kwargs)
-
-    return wrapped_fn
-
-
-# ======================================================================================================================
-# Parser Main Class
-# ======================================================================================================================
-
-
-class Parser:
-    def __init__(self, rules=None, terminal=None):
-        self.rules = {}
-        self.terminals = []
-        self.dfa = None
-
-        if rules:
-            self.add_rules(rules)
-
-        if terminal:
-            self.set_terminals(terminal)
-
-    def __copy__(self):
-        """
-        Copy the parser reusing the same DFA
-        :return:
-        """
-        dup = Parser(rules=self.rules, terminal=self.terminals)
-        dup.dfa = self.dfa
-
-        return dup
-
-    def __deepcopy__(self, memo):
-        """
-        Copy the parser and its DFA
-        :return:
-        """
-
-        dup = Parser(rules=self.rules, terminal=self.terminals)
-        dup.dfa = copy.deepcopy(self.dfa)
-
-        return dup
-
-    def set_terminals(self, terminals):
-        self.terminals = terminals
-
-    def add_rules(self, rules):
-        if rules_are_valid(rules):
-            self.rules.update(rules)
-        else:
-            raise ParserException("Invalid Rule Format")
-
-    def build(self):
-        formatted_rules = format_rules(self.rules)
-        self.dfa = DFA(formatted_rules, self.terminals)
-
-    def reset(self):
-        self.dfa.reset()
-
-    def save(self, filename="lexer.p"):
-        with open(filename, "wb") as file:
-            dill.dump(self, file)
-
-    @staticmethod
-    def load(path):
-
-        file = open(path, "rb")
-
-        try:
-            parser = dill.load(file)
-        finally:
-            file.close()
-
-        if isinstance(parser, Parser):
-            return parser
-        else:
-            raise ParserException("The unpickled object from " + path + " is not a Parser")
-
-    @_require_dfa_built
-    def parse(self, token):
-        if token:
-            self.dfa.push(token)
-            return None
-        else:
-            return self.end()
-
-    @_require_dfa_built
-    def end(self):
-        return self.dfa.end()
-
-
-# ======================================================================================================================
-# Rule formatting
-# ======================================================================================================================
+from compyl.__parser_builder.grammar_error import GrammarError, ReduceCycle
 
 
 def rules_are_valid(rules):
@@ -225,7 +113,7 @@ def parse_rule(rule):
 
     for pos, token in enumerate(token_list):
         if not is_token_valid(token):
-            raise ParserException('Parser only accepts token composed of letters, numbers and underscores')
+            raise ValueError('Parser only accepts token composed of letters, numbers and underscores')
 
         if token[-1] == "?":
             token = token[:-1]

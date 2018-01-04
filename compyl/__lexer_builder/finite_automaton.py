@@ -1,10 +1,9 @@
 from itertools import count
-
-import compyl.Lexer.RegExp as RegExp
-
-import compyl.Lexer.IntervalOperations as IntervalOp
 import copy
 from functools import cmp_to_key
+
+import compyl.__lexer_builder.regexp as RegExp
+import compyl.__lexer_builder.interval_operations as IntervalOp
 
 
 # ======================================================================================================================
@@ -97,14 +96,14 @@ class NodeFiniteAutomaton(object):
         """
         if not self.terminal_exists():
             if terminal_token is None:
-                self._set_terminal_to_ignored()
+                self.__set_terminal_to_ignored()
             elif isinstance(terminal_token, str) or callable(terminal_token):
                 self.terminal_token = terminal_token
             else:
                 raise FiniteAutomatonError(
                     "The terminal token must be a string, a function, or None")
 
-    def _set_terminal_to_ignored(self):
+    def __set_terminal_to_ignored(self):
         """
         Set the terminal token value to ignored
         """

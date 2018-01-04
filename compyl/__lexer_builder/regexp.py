@@ -1,7 +1,7 @@
 import copy
 import re
 
-from compyl.Lexer.IntervalOperations import inverse_intervals_list, merge_intervals, get_minimal_covering_intervals
+from compyl.__lexer_builder.interval_operations import inverse_intervals_list, get_minimal_covering_intervals
 
 
 # ======================================================================================================================

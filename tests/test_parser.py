@@ -1,9 +1,9 @@
 import unittest
-import copy
 
-from compyl.Parser.Parser import Parser, ParserException
-from compyl.Parser.FiniteAutomaton import Token, ParserSyntaxError, ParserRulesError
-from compyl.Parser.GrammarError import GrammarError
+import copy
+from compyl.__parser_builder.finite_automaton import Token, ParserSyntaxError, ParserRulesError
+from compyl.__parser_builder.grammar_error import GrammarError
+from compyl.parser import Parser, ParserException
 
 
 # =========================================================

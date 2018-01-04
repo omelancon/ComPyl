@@ -1,6 +1,6 @@
+from compyl import lexer
+from compyl.__parser_builder.grammar_error import find_conflicts, GrammarError
 from copy import copy, deepcopy
-from compyl.Lexer import Lexer
-from compyl.Parser.GrammarError import find_conflicts, GrammarError
 
 initial_rule_name = '@Start'
 
@@ -121,7 +121,7 @@ class DFA:
         length = reduce_instruction['reduce_len']
         token_type = reduce_instruction['token']
 
-        reducer_args = [token if isinstance(token, Lexer.Token) else token.value for node, token in
+        reducer_args = [token if isinstance(token, lexer.Token) else token.value for node, token in
                         self.stack[-length:]] if length > 0 else []
         reduced_value = reducer(*reducer_args)
 

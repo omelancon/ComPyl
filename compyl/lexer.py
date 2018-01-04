@@ -1,11 +1,31 @@
 import copy
 import dill
 
-from compyl.Lexer.FiniteAutomaton import DFA, NodeIsNotTerminalState
+from compyl.__lexer_builder.finite_automaton import DFA, NodeIsNotTerminalState
 
 
 class LexerError(Exception):
     pass
+
+
+# ======================================================================================================================
+# Parser decorators
+# ======================================================================================================================
+
+
+def _require_dfa(fn):
+    def wrapped_fn(self, *args, **kwargs):
+        if not self.dfa:
+            raise LexerError
+        else:
+            return fn(self, *args, **kwargs)
+
+    return wrapped_fn
+
+
+# ======================================================================================================================
+# Lexer main classes
+# ======================================================================================================================
 
 
 class Token:
@@ -258,6 +278,7 @@ class Lexer:
         else:
             raise LexerError("The unpickled object from " + path + " is not a Lexer")
 
+    @_require_dfa
     def lex(self):
         try:
             _ = self.buffer[self.pos]

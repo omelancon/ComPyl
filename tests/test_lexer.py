@@ -1,9 +1,8 @@
 import unittest
+
 import copy
-
-from compyl.Lexer.Lexer import Lexer, LexerError
-from compyl.Lexer.FiniteAutomaton import FiniteAutomatonError
-
+from compyl.__lexer_builder.finite_automaton import FiniteAutomatonError
+from compyl.lexer import Lexer, LexerError
 
 FAIL = False
 
