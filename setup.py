@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(name='compyl',
       packages=find_packages(exclude=("tests",)),
-      version='0.1.0',
+      version='0.1.1',
       description='Python lexing-parsing tool',
       author='Olivier Melancon',
       author_email='ol.melancon@gmail.com',
