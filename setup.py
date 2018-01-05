@@ -1,7 +1,7 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(name='compyl',
-      packages=['compyl'],
+      packages=find_packages(exclude=("tests",)),
       version='0.1.0',
       description='Python lexing-parsing tool',
       author='Olivier Melancon',
