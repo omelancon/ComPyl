@@ -4,3 +4,4 @@ venv/
 *.p
 *.pyc
 __pycache__
+/dist
