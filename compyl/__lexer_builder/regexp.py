@@ -2,6 +2,7 @@ import copy
 import re
 
 from compyl.__lexer_builder.interval_operations import inverse_intervals_list, get_minimal_covering_intervals
+from compyl.__lexer_builder.errors import RegexpParsingError
 
 
 # ======================================================================================================================
@@ -23,11 +24,7 @@ from compyl.__lexer_builder.interval_operations import inverse_intervals_list, g
 #                       we convert it to any ascii value that is not \n (10)
 
 
-class RegexpTreeException(Exception):
-    pass
-
-
-class RegexpParsingException(Exception):
+class _RegexpTreeException(Exception):
     pass
 
 
@@ -44,7 +41,7 @@ class RegexpTree:
             self.type = node_type
 
         else:
-            raise RegexpTreeException("node type (first arg) must be 'single', 'union' or 'kleene'")
+            raise _RegexpTreeException("node type (first arg) must be 'single', 'union' or 'kleene'")
 
         if node_type == "single":
             self.min_ascii = values[0]
@@ -91,7 +88,7 @@ class RegexpTree:
 
     def __deepcopy__(self, memo):
         if id(self) in memo:
-            raise RegexpTreeException("found loop in RegexpTree while deepcopying")
+            raise _RegexpTreeException("found loop in RegexpTree while deepcopying")
         else:
             memo[id(self)] = self
 
@@ -175,7 +172,7 @@ class RegexpTree:
             max_len = float('inf')
 
         else:
-            raise RegexpTreeException("Unrecognized RegExpTree type when calculating length")
+            raise _RegexpTreeException("Unrecognized RegExpTree type when calculating length")
 
         next_min, next_max = get_length(self.next)
 
@@ -203,7 +200,7 @@ class RegexpTree:
             exp = "(%s)*" % self.pattern.print_regexp()
 
         else:
-            raise RegexpTreeException("node is of unexpected type")
+            raise _RegexpTreeException("node is of unexpected type")
 
         return exp if self.next is None else (exp + self.next.print_regexp())
 
@@ -334,14 +331,14 @@ class Set(CharSet):
                     last = parsed_tokens.pop()
                     next = tokens[pos + 1]
                 except IndexError:
-                    raise RegexpParsingException
+                    raise RegexpParsingError
 
                 if isinstance(last, Char) and isinstance(next, Char) and last.ascii <= next.ascii:
                     parsed_tokens.append(
                         CharSet((last.ascii, next.ascii))
                     )
                 else:
-                    raise RegexpParsingException
+                    raise RegexpParsingError
 
                 pos += 2
             else:
@@ -513,7 +510,7 @@ class Tokenizer:
                 value = match.group()
                 return token_cls(value), len(value)
         else:
-            raise RegexpParsingException
+            raise RegexpParsingError
 
     @classmethod
     def tokenize(cls, regexp, where=None):
@@ -529,9 +526,14 @@ class Tokenizer:
 class Parser:
     @classmethod
     def parse(cls, regexp):
-        tokens = Tokenizer.tokenize(regexp)
 
-        return cls._parse(tokens, top_level=True)
+        try:
+            tokens = Tokenizer.tokenize(regexp)
+
+            return cls._parse(tokens, top_level=True)
+
+        except RegexpParsingError:
+            raise RegexpParsingError("Syntax error in regexp {}".format(regexp))
 
     @classmethod
     def _concat_nodes(cls, nodes):
@@ -563,7 +565,7 @@ class Parser:
 
             elif isinstance(tk, RPar):
                 if top_level:
-                    raise RegexpParsingException
+                    raise RegexpParsingError
                 else:
                     return cls._concat_nodes(regexp_nodes)
 
@@ -571,7 +573,7 @@ class Parser:
                 try:
                     repeated_node = regexp_nodes.pop()
                 except IndexError:
-                    raise RegexpParsingException
+                    raise RegexpParsingError
 
                 regexp_nodes.append(
                     tk.repeat_regexptree(repeated_node)
@@ -585,10 +587,10 @@ class Parser:
                 )
 
             else:
-                raise RegexpParsingException
+                raise RegexpParsingError
 
         # Consumed all tokens, return only if out of parentheses
         if top_level:
             return cls._concat_nodes(regexp_nodes)
         else:
-            raise RegexpParsingException
+            raise RegexpParsingError

@@ -3,7 +3,7 @@ import unittest
 import copy
 from compyl.__parser_builder.finite_automaton import Token, ParserSyntaxError, ParserRulesError
 from compyl.__parser_builder.grammar_error import GrammarError
-from compyl.parser import Parser, ParserException
+from compyl.parser import Parser, ParserError
 
 
 # =========================================================
@@ -525,7 +525,7 @@ class ParserTestBuild(unittest.TestCase):
             'A': ('a', placeholder_reducer),
         }
 
-        self.assertRaises(ParserException, Parser, rules=rules, terminal='A')
+        self.assertRaises(ParserError, Parser, rules=rules, terminal='A')
 
     def test_must_build_before_parse(self):
         rules = {
@@ -536,7 +536,7 @@ class ParserTestBuild(unittest.TestCase):
 
         tk = generate_token('a')
 
-        self.assertRaises(ParserException, parser.parse, tk)
+        self.assertRaises(ParserError, parser.parse, tk)
 
     def test_must_build_before_end(self):
         rules = {
@@ -545,7 +545,7 @@ class ParserTestBuild(unittest.TestCase):
 
         parser = Parser(rules=rules, terminal='dummy_rule')
 
-        self.assertRaises(ParserException, parser.end)
+        self.assertRaises(ParserError, parser.end)
 
 
 class ParserTestReset(unittest.TestCase):

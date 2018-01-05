@@ -1,7 +1,6 @@
 import unittest
 
 import copy
-from compyl.__lexer_builder.finite_automaton import FiniteAutomatonError
 from compyl.lexer import Lexer, LexerError
 
 FAIL = False
@@ -626,7 +625,7 @@ class LexerTestBuild(unittest.TestCase):
 
         lexer = Lexer(rules=rules)
 
-        self.assertRaises(FiniteAutomatonError, lexer.build)
+        self.assertRaises(LexerError, lexer.build)
 
     def test_special_action_choices(self):
         rules = [
@@ -635,7 +634,7 @@ class LexerTestBuild(unittest.TestCase):
 
         lexer = Lexer(rules=rules)
 
-        self.assertRaises(FiniteAutomatonError, lexer.build)
+        self.assertRaises(LexerError, lexer.build)
 
 
 class LexerTestSave(LexerTestBasic):

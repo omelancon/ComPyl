@@ -5,7 +5,7 @@ from compyl.__parser_builder.finite_automaton import DFA
 from compyl.__parser_builder.rule_formatter import rules_are_valid, format_rules
 
 
-class ParserException(Exception):
+class ParserError(Exception):
     pass
 
 
@@ -17,7 +17,7 @@ class ParserException(Exception):
 def _require_dfa(fn):
     def wrapped_fn(self, *args, **kwargs):
         if not self.dfa:
-            raise ParserException
+            raise ParserError
         else:
             return fn(self, *args, **kwargs)
 
@@ -69,7 +69,7 @@ class Parser:
         if rules_are_valid(rules):
             self.rules.update(rules)
         else:
-            raise ParserException("Invalid Rule Format")
+            raise ParserError("Invalid Rule Format")
 
     def build(self):
         formatted_rules = format_rules(self.rules)
@@ -95,7 +95,7 @@ class Parser:
         if isinstance(parser, Parser):
             return parser
         else:
-            raise ParserException("The unpickled object from " + path + " is not a Parser")
+            raise ParserError("The unpickled object from " + path + " is not a Parser")
 
     @_require_dfa
     def parse(self, token):

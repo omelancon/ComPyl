@@ -4,17 +4,15 @@ from functools import cmp_to_key
 
 import compyl.__lexer_builder.regexp as RegExp
 import compyl.__lexer_builder.interval_operations as IntervalOp
+from compyl.__lexer_builder.errors import LexerBuildError
 
 
 # ======================================================================================================================
 # Finite Automatons Classes
 # ======================================================================================================================
 
-class FiniteAutomatonError(Exception):
-    pass
 
-
-class NodeIsNotTerminalState(Exception):
+class NodeIsNotTerminalState(LexerBuildError):
     pass
 
 
@@ -100,7 +98,7 @@ class NodeFiniteAutomaton(object):
             elif isinstance(terminal_token, str) or callable(terminal_token):
                 self.terminal_token = terminal_token
             else:
-                raise FiniteAutomatonError(
+                raise LexerBuildError(
                     "The terminal token must be a string, a function, or None")
 
     def __set_terminal_to_ignored(self):
@@ -365,25 +363,25 @@ class DFA:
             rule = RegExp.format_regexp(packed_rule[0])
 
             if rule is None or rule.length()[0] == 0:
-                raise FiniteAutomatonError("error with rule '%s', regexp minimum length cannot be 0" % packed_rule[0])
+                raise LexerBuildError("error with rule '%s', regexp minimum length cannot be 0" % packed_rule[0])
 
             token = packed_rule[1]
             try:
                 if packed_rule[2] == "trigger_on_contain":
                     if not callable(token):
-                        raise FiniteAutomatonError("token of special action trigger_on_contain must be a function")
+                        raise LexerBuildError("token of special action trigger_on_contain must be a function")
 
                     special_action = self.TRIGGER_ON_CONTAIN
 
                 elif packed_rule[2] == "non_greedy":
                     if not (callable(token) or isinstance(token, str) or token is None):
-                        raise FiniteAutomatonError(
+                        raise LexerBuildError(
                             "token of special action non_greedy must be a function, a string or None")
 
                     special_action = self.NON_GREEDY
 
                 else:
-                    raise FiniteAutomatonError("special action of rule (third parameter) is unrecognized")
+                    raise LexerBuildError("special action of rule (third parameter) is unrecognized")
 
             except IndexError:
                 special_action = None
@@ -904,7 +902,7 @@ def hopcrofts_algorithm(dfa_nodes_table, alphabet, error_state_id=tuple()):
         if error_state_id in error_states:
             break
     else:
-        raise FiniteAutomatonError("lost error state in Hopcroft's algorithm")
+        raise LexerBuildError("lost error state in Hopcroft's algorithm")
     partition.remove(error_states)
 
     minimal_dfa = {}
@@ -991,7 +989,7 @@ def build_dfa_from_dict(dfa_as_dict, starting_state_id):
             initial_node_id = fset
             break
     else:
-        raise FiniteAutomatonError("For unknown reason, the build algorithm lost its own initial state. Puzzling.")
+        raise LexerBuildError("For unknown reason, the build algorithm lost its own initial state. Puzzling.")
 
     return dfa_nodes_as_dict[initial_node_id]
 

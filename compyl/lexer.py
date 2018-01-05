@@ -2,10 +2,10 @@ import copy
 import dill
 
 from compyl.__lexer_builder.finite_automaton import DFA, NodeIsNotTerminalState
+from compyl.__lexer_builder.errors import LexerError, LexerSyntaxError, LexerBuildError, RegexpParsingError
 
 
-class LexerError(Exception):
-    pass
+__all__ = ['Token', 'Lexer', 'LexerError', 'LexerSyntaxError', 'LexerBuildError', 'RegexpParsingError']
 
 
 # ======================================================================================================================
@@ -16,7 +16,7 @@ class LexerError(Exception):
 def _require_dfa(fn):
     def wrapped_fn(self, *args, **kwargs):
         if not self.dfa:
-            raise LexerError
+            raise LexerError('Must call build() first')
         else:
             return fn(self, *args, **kwargs)
 
@@ -321,7 +321,7 @@ class Lexer:
                 try:
                     terminal_token = self.dfa.get_current_state_terminal()
                 except NodeIsNotTerminalState:
-                    raise LexerError("Syntax error at line %s" % self.lineno)
+                    raise LexerSyntaxError("Syntax error at line %s" % self.lineno)
 
                 break
 
