@@ -1,9 +1,6 @@
 import unittest
-import copy
-import os
-import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import copy
 from compyl.lexer import Lexer, LexerError
 
 FAIL = False
