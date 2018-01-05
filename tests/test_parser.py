@@ -1,7 +1,7 @@
 import unittest
 
 import copy
-from compyl.__parser_builder.finite_automaton import Token
+from compyl.__parser.finite_automaton import Token
 from compyl.parser import Parser, ParserError, ParserBuildError, ParserSyntaxError, GrammarError
 
 

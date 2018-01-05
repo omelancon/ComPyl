@@ -1,8 +1,8 @@
 import copy
 import re
 
-from compyl.__parser_builder.grammar_error import ReduceCycle
-from compyl.__parser_builder.error import GrammarError
+from compyl.__parser.grammar_error import ReduceCycle
+from compyl.__parser.error import GrammarError
 
 
 def rules_are_valid(rules):

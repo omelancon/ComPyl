@@ -2,9 +2,9 @@ from itertools import count
 import copy
 from functools import cmp_to_key
 
-import compyl.__lexer_builder.regexp as RegExp
-import compyl.__lexer_builder.interval_operations as IntervalOp
-from compyl.__lexer_builder.errors import LexerBuildError
+import compyl.__lexer.regexp as RegExp
+import compyl.__lexer.interval_operations as IntervalOp
+from compyl.__lexer.errors import LexerBuildError
 
 
 # ======================================================================================================================

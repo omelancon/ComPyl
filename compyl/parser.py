@@ -1,9 +1,9 @@
 import copy
 import dill
 
-from compyl.__parser_builder.finite_automaton import DFA
-from compyl.__parser_builder.rule_formatter import rules_are_valid, format_rules
-from compyl.__parser_builder.error import ParserError, ParserSyntaxError, ParserBuildError, GrammarError
+from compyl.__parser.finite_automaton import DFA
+from compyl.__parser.rule_formatter import rules_are_valid, format_rules
+from compyl.__parser.error import ParserError, ParserSyntaxError, ParserBuildError, GrammarError
 
 
 __all__ = ['Parser', 'ParserError', 'ParserSyntaxError', 'ParserBuildError', 'GrammarError']

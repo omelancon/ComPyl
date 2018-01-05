@@ -1,8 +1,8 @@
 from copy import copy, deepcopy
 
 from compyl import lexer
-from compyl.__parser_builder.grammar_error import find_conflicts
-from compyl.__parser_builder.error import GrammarError, ParserBuildError, ParserSyntaxError
+from compyl.__parser.grammar_error import find_conflicts
+from compyl.__parser.error import GrammarError, ParserBuildError, ParserSyntaxError
 
 initial_rule_name = '@Start'
 

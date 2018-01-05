@@ -1,8 +1,8 @@
 import copy
 import re
 
-from compyl.__lexer_builder.interval_operations import inverse_intervals_list, get_minimal_covering_intervals
-from compyl.__lexer_builder.errors import RegexpParsingError
+from compyl.__lexer.interval_operations import inverse_intervals_list, get_minimal_covering_intervals
+from compyl.__lexer.errors import RegexpParsingError
 
 
 # ======================================================================================================================

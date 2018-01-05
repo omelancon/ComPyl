@@ -1,8 +1,8 @@
 import copy
 import dill
 
-from compyl.__lexer_builder.finite_automaton import DFA, NodeIsNotTerminalState
-from compyl.__lexer_builder.errors import LexerError, LexerSyntaxError, LexerBuildError, RegexpParsingError
+from compyl.__lexer.finite_automaton import DFA, NodeIsNotTerminalState
+from compyl.__lexer.errors import LexerError, LexerSyntaxError, LexerBuildError, RegexpParsingError
 
 
 __all__ = ['Token', 'Lexer', 'LexerError', 'LexerSyntaxError', 'LexerBuildError', 'RegexpParsingError']
