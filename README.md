@@ -1,3 +1,3 @@
 # ComPyl
 
-A Lexer and Parser in Python. Still in heavy development.
+A Lexer and Parser in Python. First release coming shortly!
