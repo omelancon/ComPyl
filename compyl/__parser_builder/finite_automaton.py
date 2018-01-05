@@ -1,16 +1,10 @@
-from compyl import lexer
-from compyl.__parser_builder.grammar_error import find_conflicts, GrammarError
 from copy import copy, deepcopy
 
+from compyl import lexer
+from compyl.__parser_builder.grammar_error import find_conflicts
+from compyl.__parser_builder.error import GrammarError, ParserBuildError, ParserSyntaxError
+
 initial_rule_name = '@Start'
-
-
-class ParserRulesError(Exception):
-    pass
-
-
-class ParserSyntaxError(Exception):
-    pass
 
 
 class Token:
@@ -78,7 +72,7 @@ class DFA:
         :return:
         """
         if not terminal_tokens:
-            raise ParserRulesError("No terminal token was given")
+            raise ParserBuildError("No terminal token was given")
         elif not isinstance(terminal_tokens, list):
             terminal_tokens = [terminal_tokens]
         self.stack = []
@@ -290,7 +284,7 @@ def build_initial_node(rules, terminal_tokens):
 
     for token in terminal_tokens:
         if token not in rules:
-            raise ParserRulesError("Terminal Token is not present in rules")
+            raise ParserBuildError("Terminal Token is not present in rules")
 
     initial_lr_items = []
 

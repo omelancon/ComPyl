@@ -1,9 +1,8 @@
 import unittest
 
 import copy
-from compyl.__parser_builder.finite_automaton import Token, ParserSyntaxError, ParserRulesError
-from compyl.__parser_builder.grammar_error import GrammarError
-from compyl.parser import Parser, ParserError
+from compyl.__parser_builder.finite_automaton import Token
+from compyl.parser import Parser, ParserError, ParserBuildError, ParserSyntaxError, GrammarError
 
 
 # =========================================================
@@ -510,7 +509,7 @@ class ParserTestBuild(unittest.TestCase):
         }
 
         parser = Parser(rules=rules)
-        self.assertRaises(ParserRulesError, parser.build)
+        self.assertRaises(ParserBuildError, parser.build)
 
     def test_terminal_in_rules(self):
         rules = {
@@ -518,7 +517,7 @@ class ParserTestBuild(unittest.TestCase):
         }
 
         parser = Parser(rules=rules, terminal='B')
-        self.assertRaises(ParserRulesError, parser.build)
+        self.assertRaises(ParserBuildError, parser.build)
 
     def test_rule_structure(self):
         rules = {

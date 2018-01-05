@@ -3,10 +3,10 @@ import dill
 
 from compyl.__parser_builder.finite_automaton import DFA
 from compyl.__parser_builder.rule_formatter import rules_are_valid, format_rules
+from compyl.__parser_builder.error import ParserError, ParserSyntaxError, ParserBuildError, GrammarError
 
 
-class ParserError(Exception):
-    pass
+__all__ = ['Parser', 'ParserError', 'ParserSyntaxError', 'ParserBuildError', 'GrammarError']
 
 
 # ======================================================================================================================
