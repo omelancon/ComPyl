@@ -5,7 +5,7 @@ A Lexer and Parser in Python.
 ## Installation
 
 ```
-sudo pip install compyl
+pip install compyl
 ```
 
 ## Documentation
