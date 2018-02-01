@@ -98,21 +98,22 @@ class MetaLexer(type):
         else:
             return RuleHarvester()
 
-    def __new__(cls, name, bases, rule_harvester):
+    def __new__(cls, name, bases, name_space):
 
         # MetaLexer is only meant to be used for the Lexer class below, so we allow the creation of the class as a
         # way to inherit the metaclass, but any other inheritance will not return a class.
         if not bases:
-            return type.__new__(cls, name, bases, {})
+            return type.__new__(cls, name, bases, name_space)
 
         elif len(bases) == 1:
             # use the rule_harvester to return a compyl.lexer.Lexer object
             # We expect compyl.lexer.Lexer to be the only class to have MetaLexer as metaclass
+            # name_space is of type RuleHarvester at that point
             Lexer = bases[0]
             return Lexer(
-                rules=rule_harvester.lexer_rules,
-                terminal_actions=rule_harvester.terminal_actions,
-                params=rule_harvester.params
+                rules=name_space.lexer_rules,
+                terminal_actions=name_space.terminal_actions,
+                params=name_space.params
             )
 
         else:

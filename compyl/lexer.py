@@ -3,6 +3,7 @@ import dill
 
 from compyl.__lexer.finite_automaton import DFA, NodeIsNotTerminalState
 from compyl.__lexer.errors import LexerError, LexerSyntaxError, LexerBuildError, RegexpParsingError
+from compyl.__lexer.metaclass import MetaLexer
 
 
 __all__ = ['Token', 'Lexer', 'LexerError', 'LexerSyntaxError', 'LexerBuildError', 'RegexpParsingError']
@@ -52,7 +53,7 @@ class Token:
             raise NotImplemented
 
 
-class Lexer:
+class Lexer(metaclass=MetaLexer):
     """
     Tokenize a string given a set of rules by building a Deterministic Finite Automaton.
 
