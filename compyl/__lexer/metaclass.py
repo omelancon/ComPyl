@@ -14,9 +14,6 @@ class RuleHarvester(dict):
         else:
             self._add_rule_item(key, value)
 
-    def get_rules(self):
-        return self.lexer_rules
-
     def get_dict(self):
         return dict(self)
 
@@ -94,8 +91,12 @@ class RuleHarvester(dict):
 
 
 class MetaLexer(type):
-    def __prepare__(*args):
-        return RuleHarvester()
+    def __prepare__(name, bases):
+        if not bases:
+            return dict()
+
+        else:
+            return RuleHarvester()
 
     def __new__(cls, name, bases, rule_harvester):
 
@@ -104,13 +105,15 @@ class MetaLexer(type):
         if not bases:
             return type.__new__(cls, name, bases, {})
 
-        else:
+        elif len(bases) == 1:
             # use the rule_harvester to return a compyl.lexer.Lexer object
-            raise NotImplemented
+            # We expect compyl.lexer.Lexer to be the only class to have MetaLexer as metaclass
+            Lexer = bases[0]
+            return Lexer(
+                rules=rule_harvester.lexer_rules,
+                terminal_actions=rule_harvester.terminal_actions,
+                params=rule_harvester.params
+            )
 
-
-class Lexer(metaclass=MetaLexer):
-    pass
-
-
-
+        else:
+            raise TypeError('Lexer cannot be inherited along wit other classes')
