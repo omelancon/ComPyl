@@ -1,5 +1,24 @@
 import re
 
+# _Terminal is a bride between the old API which received either a string or a function as token
+# Since the role of the new token of type function has changed, it no longer returns the token, both can
+# be provided at once. This class mimics the behaviour of token as functions.
+
+
+def get_callable_terminal_token(token, instruction):
+
+    if instruction is None:
+        return lambda *args: token
+
+    else:
+        def _call_instruction(*args):
+            instruction(*args)
+            return token
+
+        return _call_instruction
+
+
+
 class RuleHarvester(dict):
     def __init__(self, *args, **kwargs):
         self.lexer_rules = []
@@ -73,20 +92,20 @@ class RuleHarvester(dict):
                 rule_item = self._get_line_rule_item(pattern)
 
             elif re.match('_+', token):
-                rule_item = [(pattern, None, instruction, tag)]
+                rule_item = [(pattern, get_callable_terminal_token(None, instruction), tag)]
 
             else:
-                rule_item = [(pattern, token, instruction, tag)]
+                rule_item = [(pattern, get_callable_terminal_token(token, instruction), tag)]
 
             self.lexer_rules += rule_item
 
     @staticmethod
     def _get_line_rule_item(pattern):
-        def line_incrementer(t, v): t.increment_line()
+        def line_incrementer(t): t.increment_line()
 
         return [
-            (pattern, None, None, None),
-            (pattern, None, line_incrementer, 'trigger_on_contain')
+            (pattern, get_callable_terminal_token(None, None), None),
+            (pattern, get_callable_terminal_token(None, line_incrementer), 'trigger_on_contain')
         ]
 
 

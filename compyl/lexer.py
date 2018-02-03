@@ -151,8 +151,8 @@ class Lexer(metaclass=MetaLexer):
         # List of method called everytime a token is returned
         self.terminal_actions = []
 
-        # The Non-deterministic Finite Automaton that can later be optionally be saved
-        self.nfa = None
+        # The Deterministic Finite Automaton
+        self.dfa = None
 
         # A dict of params that is accessible to rules as functions
         self.params = params if params else {}
@@ -204,6 +204,11 @@ class Lexer(metaclass=MetaLexer):
         dup.dfa = copy.deepcopy(self.dfa)
 
         return dup
+
+    def __call__(self):
+        lexer_copy = copy.deepcopy(self)
+        lexer_copy._build()
+        return lexer_copy
 
     def read(self, buffer):
         if not isinstance(buffer, str):
@@ -257,7 +262,7 @@ class Lexer(metaclass=MetaLexer):
                 raise LexerError("""terminal action must be of type (function, string) tuple,
                     the string can take values 'always', 'only_ignored' or 'only_tokens'""")
 
-    def build(self):
+    def _build(self):
         self.dfa = DFA(rules=self.rules)
 
     def save(self, filename="lexer.p"):
