@@ -28,9 +28,10 @@ def get_token_stream_values(lexer, buffer):
 
 
 def test_regexp_on_buffer(regexp, buffer):
-    rules = [(regexp, 'placeholder')]
-    lexer = Lexer(rules=rules)
-    lexer.build()
+    class L(Lexer):
+        placeholder = regexp
+
+    lexer = L()
 
     return get_token_stream_values(lexer, buffer)
 
@@ -38,15 +39,15 @@ def test_regexp_on_buffer(regexp, buffer):
 class LexerTestBasic(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        rules = [
-            (r'[a-z]+', 'WORD'),
-            (r'unreachable', 'UNREACHABLE'),
-            (r'[0-9]+', 'NUMBER'),
-            (r' ', None),
-        ]
+        class L(Lexer):
+            line_rule = '\n'
 
-        cls.lexer = Lexer(rules=rules, line_rule='\n')
-        cls.lexer.build()
+            WORD = r'[a-z]+'
+            UNREACHABLE = 'unreachable'
+            NUMBER = r'[0-9]+'
+            _ = r' '
+
+        cls.lexer = L()
 
         cls.lexer_copy = copy.deepcopy(cls.lexer)
 
@@ -84,16 +85,17 @@ class LexerTestSpecialActions(unittest.TestCase):
         def digit_counter(t):
             t.params['digits'] += 1
 
-        rules = [
-            (r'[a-z]', letter_counter, 'trigger_on_contain'),
-            (r'[0-9]', digit_counter, 'trigger_on_contain'),
-            (r'[a-zA-Z0-9]+', 'TOKEN'),
-            (r'[a-zA-Z0-9]+END', 'TOKEN', 'non_greedy'),
-            (r' ', None)
-        ]
+        class L(Lexer):
+            line_rule = '\n'
+            params = {'letters': 0, 'digits': 0}
 
-        cls.lexer = Lexer(rules=rules, line_rule='\n', params={'letters': 0, 'digits': 0})
-        cls.lexer.build()
+            _ = r'[a-z]', letter_counter, 'trigger_on_contain'
+            _ = r'[0-9]', digit_counter, 'trigger_on_contain'
+            TOKEN = r'[a-zA-Z0-9]+'
+            TOKEN = r'[a-zA-Z0-9]+END', 'non_greedy'
+            _ = r' '
+
+        cls.lexer = L()
 
         cls.lexer_copy = copy.deepcopy(cls.lexer)
 
@@ -131,15 +133,13 @@ class LexerTestController(unittest.TestCase):
         def increment_line(t):
             t.increment_line()
 
-        rules = [
-            (r'[a-zA-Z]', 'LETTER'),
-            (r'\n', None),
-            (r'\n', increment_line, 'trigger_on_contain'),
-            (r'[a-zA-Z]', skip_next, 'trigger_on_contain')
-        ]
+        class L(Lexer):
+            LETTER = r'[a-zA-Z]'
+            _ = r'\n'
+            _ = r'\n', increment_line, 'trigger_on_contain'
+            _ = r'[a-zA-Z]', skip_next, 'trigger_on_contain'
 
-        cls.lexer = Lexer(rules=rules)
-        cls.lexer.build()
+        cls.lexer = L()
 
         cls.lexer_copy = copy.deepcopy(cls.lexer)
 
@@ -169,13 +169,18 @@ class LexerTestController(unittest.TestCase):
 class LexerTestLineRule(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        class L(Lexer):
+            line_rule='\n'
+
+            WORD = r'\w+'
+            _ = r' |\t'
+
         rules = [
             (r'\w+', 'WORD'),
             (r' |\t', None)
         ]
 
-        cls.lexer = Lexer(rules=rules, line_rule='\n')
-        cls.lexer.build()
+        cls.lexer = L()
 
         cls.lexer_copy = copy.deepcopy(cls.lexer)
 
@@ -202,12 +207,10 @@ class LexerTestLineRule(unittest.TestCase):
 
 class LexerTestRegexp(unittest.TestCase):
     def test_match_dot(self):
-        rules = [
-            (r'.', 'DOT')
-        ]
+        class L(Lexer):
+            DOT = r'.'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         lexer.read('a\n')
 
@@ -216,36 +219,30 @@ class LexerTestRegexp(unittest.TestCase):
         self.assertRaises(LexerError, lexer.lex)
 
     def test_match_any(self):
-        rules = [
-            (r'_', 'ANY')
-        ]
+        class L(Lexer):
+            ANY = r'_'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, '&F=\n')
         self.assertEqual(token_values, ['&', 'F', '=', '\n'])
 
     def test_match_kleene(self):
         # The x before the MANY_A rule is needed as regexp must have minimal length over 0
-        rules = [
-            (r'xa*', 'MANY_A')
-        ]
+        class L(Lexer):
+            MANY_A = r'xa*'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, 'xxaaa')
         self.assertEqual(token_values, ['x', 'xaaa'])
 
     def test_match_plus(self):
-        rules = [
-            (r'a+', 'MANY_A'),
-            (r'xa+', 'X_WITH_A')
-        ]
+        class L(Lexer):
+            MANY_A = r'a+'
+            X_WITH_A = r'xa+'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, 'aaa')
         self.assertEqual(token_values, ['aaa'])
@@ -254,23 +251,19 @@ class LexerTestRegexp(unittest.TestCase):
         self.assertRaises(LexerError, lexer.lex)
 
     def test_match_optional(self):
-        rules = [
-            (r'xa?', 'X_MAYBE_A')
-        ]
+        class L(Lexer):
+            X_MAYBE_A = r'xa?'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, 'xxa')
         self.assertEqual(token_values, ['x', 'xa'])
 
     def test_match_amount(self):
-        rules = [
-            (r'a{3}', 'THREE_A')
-        ]
+        class L(Lexer):
+            THREE_A = r'a{3}'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         lexer.read('aaaaa')
         tk = lexer.lex()
@@ -278,12 +271,10 @@ class LexerTestRegexp(unittest.TestCase):
         self.assertRaises(LexerError, lexer.lex)
 
     def test_match_min_max_amount(self):
-        rules = [
-            (r'a{2, 3}x', 'THREE_A')
-        ]
+        class L(Lexer):
+            THREE_A = r'a{2, 3}x'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         lexer.read('aaaxaaxax')
         tk = lexer.lex()
@@ -293,70 +284,58 @@ class LexerTestRegexp(unittest.TestCase):
         self.assertRaises(LexerError, lexer.lex)
 
     def test_match_or(self):
-        rules = [
-            (r'A|B', 'A_OR_B')
-        ]
+        class L(Lexer):
+            A_OR_B = r'A|B'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, 'AB')
         self.assertEqual(token_values, ['A', 'B'])
 
     def test_match_set(self):
-        rules = [
-            (r'[abc]', 'ABC')
-        ]
+        class L(Lexer):
+            ABC = r'[abc]'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, 'abc')
         self.assertEqual(token_values, ['a', 'b', 'c'])
         self.assertRaises(LexerError, get_token_stream, lexer, 'd')
 
     def test_match_set_inverse(self):
-        rules = [
-            (r'[^a]', 'NOT_A')
-        ]
+        class L(Lexer):
+            NOT_A = r'[^a]'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, 'bcd')
         self.assertEqual(token_values, ['b', 'c', 'd'])
         self.assertRaises(LexerError, get_token_stream, lexer, 'a')
 
     def test_match_escape(self):
-        rules = [
-            (r'\*', 'STAR')
-        ]
+        class L(Lexer):
+            STAR = r'\*'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         token_values = get_token_stream_values(lexer, '*')
         self.assertEqual(token_values, ['*'])
 
     def test_match_escape_space(self):
-        rules = [
-            (r'\s', 'SPACE')
-        ]
+        class L(Lexer):
+            SPACE = r'\s'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         buffer = ' \t\n\r\f\v'
         token_values = get_token_stream_values(lexer, buffer)
         self.assertEqual(token_values, list(buffer))
 
     def test_match_escape_non_space(self):
-        rules = [
-            (r'\S', 'NOT_SPACE')
-        ]
+        class L(Lexer):
+            NOT_SPACE = r'\S'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         buffer = 'abc'
         token_values = get_token_stream_values(lexer, buffer)
@@ -367,24 +346,20 @@ class LexerTestRegexp(unittest.TestCase):
             self.assertRaises(LexerError, get_token_stream, lexer, c)
 
     def test_match_escape_alphanum(self):
-        rules = [
-            (r'\w', 'ALPHNUM')
-        ]
+        class L(Lexer):
+            ALPHNUM = r'\w'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         buffer = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890'
         token_values = get_token_stream_values(lexer, buffer)
         self.assertEqual(token_values, list(buffer))
 
     def test_match_escape_non_alphanum(self):
-        rules = [
-            (r'\W', 'NOT_ALPHANUM')
-        ]
+        class L(Lexer):
+            NOT_ALPHANUM = r'\W'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         buffer = '.:+!@#:'
         token_values = get_token_stream_values(lexer, buffer)
@@ -395,24 +370,20 @@ class LexerTestRegexp(unittest.TestCase):
             self.assertRaises(LexerError, get_token_stream, lexer, c)
 
     def test_match_escape_num(self):
-        rules = [
-            (r'\d', 'NUM')
-        ]
+        class L(Lexer):
+            NUM = r'\d'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         buffer = '123456789'
         token_values = get_token_stream_values(lexer, buffer)
         self.assertEqual(token_values, list(buffer))
 
     def test_match_escape_non_num(self):
-        rules = [
-            (r'\D', 'NOT_NUM')
-        ]
+        class L(Lexer):
+            NOT_NUM = r'\D'
 
-        lexer = Lexer(rules=rules)
-        lexer.build()
+        lexer = L()
 
         buffer = '.:+!@#:ABCabcxyzXYZ'
         token_values = get_token_stream_values(lexer, buffer)
@@ -510,15 +481,18 @@ class LexerTestRegexpPriority(unittest.TestCase):
 
 class LexerTestTerminalAction(unittest.TestCase):
     def test_single_terminal_action(self):
-        rules = [
-            (r'\w+', 'WORD'),
-        ]
 
         def count_all_matches(t):
             t.params['count'] += 1
 
-        lexer = Lexer(rules=rules, line_rule='\s', terminal_actions=[count_all_matches], params={'count': 0})
-        lexer.build()
+        class L(Lexer):
+            line_rule = '\s'
+            terminal_actions = [count_all_matches]
+            params = {'count': 0}
+
+            WORD = r'\w+'
+
+        lexer = L()
 
         get_token_stream(lexer, 'word word word')
         self.assertEqual(lexer.params['count'], 5)
@@ -534,32 +508,31 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_matches_again(t):
             t.params['count'] += 1
 
-        lexer = Lexer(
-            rules=rules,
-            line_rule='\s',
-            terminal_actions=[count_all_matches, count_all_matches_again],
+        class L(Lexer):
+            line_rule = r'\s'
+            terminal_actions=[count_all_matches, count_all_matches_again]
             params={'count': 0}
-        )
-        lexer.build()
+
+            WORD = r'\w+'
+
+        lexer = L()
 
         get_token_stream(lexer, 'word word word')
         self.assertEqual(lexer.params['count'], 10)
 
     def test_terminal_action_always(self):
-        rules = [
-            (r'\w+', 'WORD'),
-        ]
 
         def count_all_matches(t):
             t.params['count'] += 1
 
-        lexer = Lexer(
-            rules=rules,
-            line_rule='\s',
-            terminal_actions=[(count_all_matches, 'always')],
-            params={'count': 0}
-        )
-        lexer.build()
+        class L(Lexer):
+            line_rule = '\s'
+            terminal_actions = [(count_all_matches, 'always')]
+            params = { 'count': 0 }
+
+            WORD = r'\w+'
+
+        lexer = L()
 
         get_token_stream(lexer, 'word word word')
         self.assertEqual(lexer.params['count'], 5)
@@ -572,32 +545,31 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_ignored(t):
             t.params['count'] += 1
 
-        lexer = Lexer(
-            rules=rules,
-            line_rule='\s',
-            terminal_actions=[(count_all_ignored, 'only_ignored')],
-            params={'count': 0}
-        )
-        lexer.build()
+        class L(Lexer):
+            line_rule='\s'
+            terminal_actions=[(count_all_ignored, 'only_ignored')]
+            params = { 'count': 0 }
+
+            WORD = r'\w+'
+
+        lexer = L()
 
         get_token_stream(lexer, 'word word word')
         self.assertEqual(lexer.params['count'], 2)
 
     def test_terminal_action_on_tokens(self):
-        rules = [
-            (r'\w+', 'WORD'),
-        ]
 
         def count_all_tokens(t):
             t.params['count'] += 1
 
-        lexer = Lexer(
-            rules=rules,
-            line_rule='\s',
-            terminal_actions=[(count_all_tokens, 'only_tokens')],
-            params={'count': 0}
-        )
-        lexer.build()
+        class L(Lexer):
+            line_rule = '\s'
+            terminal_actions = [(count_all_tokens, 'only_tokens')]
+            params = {'count': 0}
+
+            WORD = r'\w+'
+
+        lexer = L()
 
         get_token_stream(lexer, 'word word word')
         self.assertEqual(lexer.params['count'], 3)
@@ -610,31 +582,41 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_tokens(t):
             pass
 
-        self.assertRaises(LexerError, Lexer,
-                          rules=rules,
-                          terminal_actions=[(count_all_tokens, 'only_foo')]
-                          )
+        try:
+            class L(Lexer):
+                terminal_actions = [(count_all_tokens, 'only_foo')]
+
+                WORD = r'\w+'
+
+            lexer = L()
+
+            self.assertTrue(False, 'only_foo should not be a valid terminal action tag')
+
+        except LexerError:
+            self.assertTrue(True)
 
 
 class LexerTestBuild(unittest.TestCase):
 
     def test_regexp_minimum_length(self):
-        rules = [
-            (r'a*', 'A')
-        ]
 
-        lexer = Lexer(rules=rules)
+        class L(Lexer):
+            A = r'a*'
 
-        self.assertRaises(LexerError, lexer.build)
+        self.assertRaises(LexerError, L)
 
     def test_special_action_choices(self):
-        rules = [
-            (r'a', 'A', 'foo')
-        ]
 
-        lexer = Lexer(rules=rules)
+        try:
+            class L(Lexer):
+                A = r'a', 'foo'
 
-        self.assertRaises(LexerError, lexer.build)
+            lexer = L()
+
+            self.assertTrue(False, 'foo should not be a valid special action tag')
+
+        except LexerError:
+            self.assertTrue(True)
 
 
 class LexerTestSave(LexerTestBasic):
