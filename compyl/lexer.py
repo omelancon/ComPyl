@@ -10,21 +10,6 @@ __all__ = ['Token', 'Lexer', 'LexerError', 'LexerSyntaxError', 'LexerBuildError'
 
 
 # ======================================================================================================================
-# Lexer decorators
-# ======================================================================================================================
-
-
-def _require_dfa(fn):
-    def wrapped_fn(self, *args, **kwargs):
-        if not self.dfa:
-            raise LexerError('Must call build() first')
-        else:
-            return fn(self, *args, **kwargs)
-
-    return wrapped_fn
-
-
-# ======================================================================================================================
 # Lexer main classes
 # ======================================================================================================================
 
@@ -155,7 +140,7 @@ class Lexer(metaclass=MetaLexer):
         self.params = copy.deepcopy(self.__params__)
 
         self.terminal_actions = []
-        self.add_terminal_actions(self.__terminal_actions__)
+        self.parse_terminal_actions(self.__terminal_actions__)
 
         # Build the dfa
         if _dfa is not None:
@@ -191,11 +176,6 @@ class Lexer(metaclass=MetaLexer):
 
         return dup
 
-    def __call__(self):
-        lexer_copy = copy.deepcopy(self)
-        lexer_copy._build()
-        return lexer_copy
-
     def read(self, buffer):
         if not isinstance(buffer, str):
             raise LexerError("buffer must be a string")
@@ -206,19 +186,7 @@ class Lexer(metaclass=MetaLexer):
         self.buffer = self.buffer[self.pos:]
         self.pos = 0
 
-    def set_line_rule(self, line_rule):
-        def line_incrementer(t): t.increment_line()
-
-        self.add_rules([
-            (line_rule, None),
-            (line_rule, line_incrementer, "trigger_on_contain")
-        ])
-
-    def add_rules(self, rules):
-        for rule in rules:
-            self.rules.append(rule)
-
-    def add_terminal_actions(self, actions):
+    def parse_terminal_actions(self, actions):
         for action in actions:
             if isinstance(action, tuple) and len(action) == 2:
                 action_fn = action[0]
@@ -258,19 +226,14 @@ class Lexer(metaclass=MetaLexer):
     @staticmethod
     def load(path):
 
-        file = open(path, "rb")
-
-        try:
+        with open(path, "rb") as file:
             lexer = dill.load(file)
-        finally:
-            file.close()
 
         if isinstance(lexer, Lexer):
             return lexer
         else:
             raise LexerError("The unpickled object from " + path + " is not a Lexer")
 
-    @_require_dfa
     def lex(self):
         try:
             _ = self.buffer[self.pos]
