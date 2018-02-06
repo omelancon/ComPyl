@@ -2,6 +2,7 @@ import unittest
 
 import copy
 from compyl.lexer import Lexer, LexerError
+from compyl.__lexer.metaclass import MetaLexer
 
 FAIL = False
 
@@ -170,7 +171,7 @@ class LexerTestLineRule(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         class L(Lexer):
-            line_rule='\n'
+            line_rule = '\n'
 
             WORD = r'\w+'
             _ = r' |\t'
@@ -478,7 +479,6 @@ class LexerTestRegexpPriority(unittest.TestCase):
                 )
 
 
-
 class LexerTestTerminalAction(unittest.TestCase):
     def test_single_terminal_action(self):
 
@@ -510,8 +510,8 @@ class LexerTestTerminalAction(unittest.TestCase):
 
         class L(Lexer):
             line_rule = r'\s'
-            terminal_actions=[count_all_matches, count_all_matches_again]
-            params={'count': 0}
+            terminal_actions = [count_all_matches, count_all_matches_again]
+            params = {'count': 0}
 
             WORD = r'\w+'
 
@@ -528,7 +528,7 @@ class LexerTestTerminalAction(unittest.TestCase):
         class L(Lexer):
             line_rule = '\s'
             terminal_actions = [(count_all_matches, 'always')]
-            params = { 'count': 0 }
+            params = {'count': 0}
 
             WORD = r'\w+'
 
@@ -546,9 +546,9 @@ class LexerTestTerminalAction(unittest.TestCase):
             t.params['count'] += 1
 
         class L(Lexer):
-            line_rule='\s'
-            terminal_actions=[(count_all_ignored, 'only_ignored')]
-            params = { 'count': 0 }
+            line_rule = '\s'
+            terminal_actions = [(count_all_ignored, 'only_ignored')]
+            params = {'count': 0}
 
             WORD = r'\w+'
 
@@ -633,6 +633,30 @@ class LexerTestSave(LexerTestBasic):
 
     def tearDown(self):
         self.__class__.lexer = Lexer.load(self.lexer_filename)
+
+
+class LexerInstanceTest(unittest.TestCase):
+    """
+    Tests to make sure metaclassing keeps type tree consistent
+    """
+
+    def test_lexer_isinstance_of_Lexer(self):
+        class L(Lexer):
+            A = r'a'
+
+        self.assertTrue(isinstance(L(), Lexer))
+
+    def test_lexer_isinstance_of_L(self):
+        class L(Lexer):
+            A = r'a'
+
+        self.assertTrue(isinstance(L(), L))
+
+    def test_lexer_not_isinstance_of_metaclass(self):
+        class L(Lexer):
+            A = r'a'
+
+        self.assertFalse(isinstance(L(), MetaLexer))
 
 
 if __name__ == '__main__':

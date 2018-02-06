@@ -19,22 +19,45 @@ def get_callable_terminal_token(token, instruction):
 
 
 
-class RuleHarvester(dict):
+class RuleHarvester():
+    """
+    Class that mimics the behaviour of a dict but filters non-magic functions (such as __init__) to allow duplicates.
+    It then returns special keys __rules__, __terminal_tokens__ and __params__
+    Used in __prepare__ method of MetaLexer to gather rules and bunch them in a single parsed list
+    """
     def __init__(self, *args, **kwargs):
+        self.dict = {}
         self.lexer_rules = []
-        self.terminal_actions = None
-        self.params = None
+        self.terminal_actions = []
+        self.params = {}
         super().__init__(*args, **kwargs)
 
     def __setitem__(self, key, value):
         if re.match(r'__\w+__', key):
-            super().__setitem__(key, value)
+            self.dict[key] = value
 
         else:
             self._add_rule_item(key, value)
 
+    def __getitem__(self, key):
+        return self.get_dict()[key]
+
+    def __iter__(self):
+        """
+        Mimic the behaviour of __iter__ of dict and adds special values
+        When unpickling, dill does not run __prepare__, thus it is necessary that the cast to a dict can be done
+        with dict(), since __new__ is actually calling dict() on a dn actual dict.
+        """
+        for k, v in self.get_dict().items():
+            yield k, v
+
     def get_dict(self):
-        return dict(self)
+        return dict(
+            self.dict,
+            __rules__=self.lexer_rules,
+            __terminal_actions__=self.terminal_actions,
+            __params__=self.params
+        )
 
     def _add_rule_item(self, token, params):
 
@@ -128,12 +151,11 @@ class MetaLexer(type):
             # use the rule_harvester to return a compyl.lexer.Lexer object
             # We expect compyl.lexer.Lexer to be the only class to have MetaLexer as metaclass
             # name_space is of type RuleHarvester at that point
-            Lexer = bases[0]
-            return Lexer(
-                rules=name_space.lexer_rules,
-                terminal_actions=name_space.terminal_actions,
-                params=name_space.params
-            )
+
+            # WARNING: When unpickling with dill, name_space is actually a dict with the keys __params__, __rules__ and
+            # __terminal_actions__ parsed already. This is fine, but we need to make sure that the cast from
+            # RuleHarvester to to dict will always be idempotent, i.e. dict(dict(name_space)) == dict(name_space)
+            return super().__new__(cls, name, bases, dict(name_space))
 
         else:
             raise TypeError('Lexer cannot be inherited along wit other classes')
