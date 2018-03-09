@@ -1,4 +1,5 @@
 import re
+from compyl.__lexer.errors import LexerSyntaxError
 
 # _Terminal is a bride between the old API which received either a string or a function as token
 # Since the role of the new token of type function has changed, it no longer returns the token, both can
@@ -66,13 +67,13 @@ class RuleHarvester():
             if not self.terminal_actions:
                 self.terminal_actions = params
             else:
-                raise ValueError('duplicate terminal_actions keyword')
+                raise LexerSyntaxError('duplicate terminal_actions keyword')
 
         elif token == 'params':
             if not self.params:
                 self.params = params
             else:
-                raise ValueError('duplicate params keyword')
+                raise LexerSyntaxError('duplicate params keyword')
 
         else:
             # Otherwise, the attribute is a rule
@@ -103,14 +104,14 @@ class RuleHarvester():
                     tag = params[2]
 
                 else:
-                    raise ValueError('Too many arguments for rule')
+                    raise LexerSyntaxError('Too many arguments for rule')
             else:
                 pattern = params
 
             # Manage reserved keywords for rules
             if token == 'line_rule':
                 if instruction or tag:
-                    raise ValueError('line_rule is reserved for line incrementation rule, cannot have tag or instruction')
+                    raise LexerSyntaxError('line_rule is reserved for line incrementation rule, cannot have tag or instruction')
 
                 rule_item = self._get_line_rule_item(pattern)
 
@@ -158,4 +159,4 @@ class MetaLexer(type):
             return super().__new__(cls, name, bases, dict(name_space))
 
         else:
-            raise TypeError('Lexer cannot be inherited along wit other classes')
+            raise TypeError('Lexer cannot be inherited along with other classes')
