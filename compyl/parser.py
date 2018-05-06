@@ -56,7 +56,7 @@ class Parser(metaclass=MetaParser):
         :return:
         """
 
-        dup = type.(self)(_dfa=copy.deepcopy(self.dfa))
+        dup = type(self)(_dfa=copy.deepcopy(self.dfa))
 
         return dup
 
