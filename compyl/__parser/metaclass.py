@@ -6,7 +6,7 @@ class RuleHarvester:
     def __init__(self, *args, **kwargs):
         self.dict = {}
         self.parser_rules = {}
-        self.terminal = []
+        self.terminals = []
         super().__init__(*args, **kwargs)
 
     def __setitem__(self, key, value):
@@ -32,15 +32,15 @@ class RuleHarvester:
         return dict(
             self.dict,
             __rules__=self.parser_rules,
-            __terminal__=self.terminal,
+            __terminals__=self.terminals,
         )
 
     def _add_rule_item(self, key, value):
 
         # Manage special keywords
         if key == 'terminal':
-            if not self.terminal:
-                self.terminal = value if isinstance(value, (list, tuple)) else [value]
+            if not self.terminals:
+                self.terminals = value if isinstance(value, (list, tuple)) else [value]
             else:
                 raise ParserSyntaxError("duplicate 'terminal' keyword")
 
