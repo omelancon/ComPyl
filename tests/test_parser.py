@@ -2,8 +2,8 @@ import unittest
 
 import copy
 from compyl.__parser.finite_automaton import Token
-from compyl.parser import ParserError, ParserBuildError, ParserSyntaxError, GrammarError
-from compyl.parser import Parser as P
+from compyl import ParserBuildError, ParserSyntaxError, GrammarError
+from compyl import Parser as P
 
 # =========================================================
 # Helper tokens and functions

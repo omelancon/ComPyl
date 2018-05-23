@@ -1,7 +1,7 @@
 import unittest
 
 import copy
-from compyl.lexer import Lexer, LexerError
+from compyl import Lexer, LexerError
 from compyl.__lexer.metaclass import MetaLexer
 
 FAIL = False
