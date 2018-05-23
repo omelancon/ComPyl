@@ -41,7 +41,7 @@ class LexerTestBasic(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         class L(Lexer):
-            line_rule = '\n'
+            line_rule('\n')
 
             WORD = r'[a-z]+'
             UNREACHABLE = 'unreachable'
@@ -87,8 +87,8 @@ class LexerTestSpecialActions(unittest.TestCase):
             t.params['digits'] += 1
 
         class L(Lexer):
-            line_rule = '\n'
-            params = {'letters': 0, 'digits': 0}
+            line_rule('\n')
+            params(letters=0, digits=0)
 
             _ = r'[a-z]', letter_counter, 'trigger_on_contain'
             _ = r'[0-9]', digit_counter, 'trigger_on_contain'
@@ -171,7 +171,7 @@ class LexerTestLineRule(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         class L(Lexer):
-            line_rule = '\n'
+            line_rule('\n')
 
             WORD = r'\w+'
             _ = r' |\t'
@@ -486,9 +486,9 @@ class LexerTestTerminalAction(unittest.TestCase):
             t.params['count'] += 1
 
         class L(Lexer):
-            line_rule = '\s'
-            terminal_actions = [count_all_matches]
-            params = {'count': 0}
+            line_rule('\s')
+            terminal_actions(count_all_matches)
+            params({'count': 0})
 
             WORD = r'\w+'
 
@@ -509,9 +509,9 @@ class LexerTestTerminalAction(unittest.TestCase):
             t.params['count'] += 1
 
         class L(Lexer):
-            line_rule = r'\s'
-            terminal_actions = [count_all_matches, count_all_matches_again]
-            params = {'count': 0}
+            line_rule(r'\s')
+            terminal_actions(count_all_matches, count_all_matches_again)
+            params(count=0)
 
             WORD = r'\w+'
 
@@ -526,9 +526,9 @@ class LexerTestTerminalAction(unittest.TestCase):
             t.params['count'] += 1
 
         class L(Lexer):
-            line_rule = '\s'
-            terminal_actions = [(count_all_matches, 'always')]
-            params = {'count': 0}
+            line_rule(r'\s')
+            terminal_actions((count_all_matches, 'always'))
+            params(count=0)
 
             WORD = r'\w+'
 
@@ -546,9 +546,9 @@ class LexerTestTerminalAction(unittest.TestCase):
             t.params['count'] += 1
 
         class L(Lexer):
-            line_rule = '\s'
-            terminal_actions = [(count_all_ignored, 'only_ignored')]
-            params = {'count': 0}
+            line_rule(r'\s')
+            terminal_actions((count_all_ignored, 'only_ignored'))
+            params({'count': 0})
 
             WORD = r'\w+'
 
@@ -563,9 +563,9 @@ class LexerTestTerminalAction(unittest.TestCase):
             t.params['count'] += 1
 
         class L(Lexer):
-            line_rule = '\s'
-            terminal_actions = [(count_all_tokens, 'only_tokens')]
-            params = {'count': 0}
+            line_rule(r'\s')
+            terminal_actions((count_all_tokens, 'only_tokens'))
+            params({'count': 0})
 
             WORD = r'\w+'
 

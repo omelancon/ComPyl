@@ -27,7 +27,12 @@ class RuleHarvester():
     Used in __prepare__ method of MetaLexer to gather rules and bunch them in a single parsed list
     """
     def __init__(self, *args, **kwargs):
-        self.dict = {}
+        # The initial dict contains functions accessible in the class scope to set non-rule properties
+        self.dict = {
+            'terminal_actions': lambda *actions: self.terminal_actions.extend(actions),
+            'params': lambda params=None, **kwargs: self.params.update(params or {}, **kwargs),
+            'line_rule': lambda pattern: self.lexer_rules.extend(self._get_line_rule_item(pattern))
+        }
         self.lexer_rules = []
         self.terminal_actions = []
         self.params = {}
@@ -61,67 +66,44 @@ class RuleHarvester():
         )
 
     def _add_rule_item(self, token, params):
+        # The following are optional and may not be provided
+        instruction = None
+        tag = None
 
-        # Manage special keywords that are not rules
-        if token == 'terminal_actions':
-            if not self.terminal_actions:
-                self.terminal_actions = params
-            else:
-                raise LexerSyntaxError('duplicate terminal_actions keyword')
+        # Get the pattern
+        if isinstance(params, (list, tuple)):
+            pattern = params[0]
 
-        elif token == 'params':
-            if not self.params:
-                self.params = params
-            else:
-                raise LexerSyntaxError('duplicate params keyword')
+            # An instruction or a tag was provided after the pattern
+            if len(params) == 2:
 
-        else:
-            # Otherwise, the attribute is a rule
-
-            # The following are optional and may not be provided
-            instruction = None
-            tag = None
-
-            # Get the pattern
-            if isinstance(params, (list, tuple)):
-                pattern = params[0]
-
-                # An instruction or a tag was provided after the pattern
-                if len(params) == 2:
-
-                    # We check type to see if an instruction or a tag was provided
-                    if callable(params[1]):
-                        instruction = params[1]
-
-                    else:
-                        tag = params[1]
-
-                # An instruction and a tag were provided after the pattern
-                elif len(params) == 3:
-
-                    # The expected syntax in that case is (pattern, instruction, tag)
+                # We check type to see which of an instruction or a tag was provided
+                if callable(params[1]):
                     instruction = params[1]
-                    tag = params[2]
 
                 else:
-                    raise LexerSyntaxError('Too many arguments for rule')
-            else:
-                pattern = params
+                    tag = params[1]
 
-            # Manage reserved keywords for rules
-            if token == 'line_rule':
-                if instruction or tag:
-                    raise LexerSyntaxError('line_rule is reserved for line incrementation rule, cannot have tag or instruction')
+            # An instruction and a tag were provided after the pattern
+            elif len(params) == 3:
 
-                rule_item = self._get_line_rule_item(pattern)
-
-            elif re.match('_+', token):
-                rule_item = [(pattern, get_callable_terminal_token(None, instruction), tag)]
+                # The expected syntax in that case is (pattern, instruction, tag)
+                instruction = params[1]
+                tag = params[2]
 
             else:
-                rule_item = [(pattern, get_callable_terminal_token(token, instruction), tag)]
+                raise LexerSyntaxError('Too many arguments for rule')
+        else:
+            pattern = params
 
-            self.lexer_rules += rule_item
+        # Case for ignored patterns
+        if re.match('_+', token):
+            rule_item = [(pattern, get_callable_terminal_token(None, instruction), tag)]
+
+        else:
+            rule_item = [(pattern, get_callable_terminal_token(token, instruction), tag)]
+
+        self.lexer_rules += rule_item
 
     @staticmethod
     def _get_line_rule_item(pattern):
