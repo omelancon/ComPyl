@@ -73,7 +73,7 @@ class DFA:
         """
         if not terminal_tokens:
             raise ParserBuildError("No terminal token was given")
-        elif not isinstance(terminal_tokens, list):
+        elif not isinstance(terminal_tokens, (list, tuple)):
             terminal_tokens = [terminal_tokens]
         self.stack = []
         self.start = self.current_state = build_dfa(rules, terminal_tokens)

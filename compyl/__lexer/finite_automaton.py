@@ -380,6 +380,9 @@ class DFA:
 
                     special_action = self.NON_GREEDY
 
+                elif packed_rule[2] is None:
+                    special_action = None
+
                 else:
                     raise LexerBuildError("special action of rule (third parameter) is unrecognized")
 
