@@ -659,5 +659,25 @@ class LexerInstanceTest(unittest.TestCase):
         self.assertFalse(isinstance(L(), MetaLexer))
 
 
+class LexerUnicode(unittest.TestCase):
+    """
+    Test that the Lexer can recognize unicode characters
+    """
+
+    def test_single_unicode(self):
+
+        for x in ('\U00000041', '\U00000F00', '\U000F0000', '\U0010FFFF'):
+            out = test_regexp_on_buffer(x, x)
+            self.assertEqual(out, [x])
+
+    def test_set_unicode(self):
+        pattern = '[\U0010FFFD-\U0010FFFF]'
+        buffer = '\U0010FFFE'
+
+        out = test_regexp_on_buffer(pattern, buffer)
+
+        self.assertEqual(out, [buffer])
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
