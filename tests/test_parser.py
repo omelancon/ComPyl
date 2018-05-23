@@ -68,7 +68,7 @@ class ParserTestBasic(unittest.TestCase):
     def setUpClass(cls):
 
         class Parser(P):
-            terminal = 'start'
+            terminal('start')
 
             start =\
                 ('TOKEN_A TOKEN_B end?', Start),\
@@ -147,7 +147,7 @@ class ParserTestAdvanced(unittest.TestCase):
 
     def test_advanced_grammar(self):
         class Parser(P):
-            terminal = 'A'
+            terminal('A')
 
             A =\
                 ('B A', get_string_of_instructions_reducer('A1')),\
@@ -194,7 +194,7 @@ class ParserTestAdvanced(unittest.TestCase):
         """
 
         class Parser(P):
-            terminal = 'A'
+            terminal('A')
 
             A = 'B e', get_string_of_instructions_reducer('A1')
             B = 'C END', get_string_of_instructions_reducer('B1')
@@ -218,7 +218,7 @@ class ParserTestAdvanced(unittest.TestCase):
     def test_sequence_of_empty_rules(self):
 
         class Parser(P):
-            terminal = 'start'
+            terminal('start')
 
             start = 'A B C', get_string_of_instructions_reducer('start1')
             A = '', get_string_of_instructions_reducer('A1')
@@ -244,7 +244,7 @@ class ParserTestAdvanced(unittest.TestCase):
 
     def test_multiple_terminals(self):
         class Parser(P):
-            terminal = 'start', 'other_start'
+            terminal('start', 'other_start')
 
             start = 'a b c', get_string_of_instructions_reducer('start1')
             other_start = 'b c d', get_string_of_instructions_reducer('other_start1')
@@ -283,7 +283,7 @@ class ParserTestAdvanced(unittest.TestCase):
 
     def test_multiple_overlapping_terminals(self):
         class Parser(P):
-            terminal = 'start', 'other_start'
+            terminal('start', 'other_start')
 
             start = 'a other_start', get_string_of_instructions_reducer('start1')
             other_start = 'b c', get_string_of_instructions_reducer('other_start1')
@@ -325,7 +325,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_reduce_reduce_basic(self):
 
         class Parser(P):
-            terminal = 'start'
+            terminal('start')
 
             start = ('a', placeholder_reducer),\
                     ('b', placeholder_reducer)
@@ -343,7 +343,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_reduce_reduce_empty_list(self):
 
         class Parser(P):
-            terminal = 'list'
+            terminal('list')
 
             list =\
                 ('list_of_letters', placeholder_reducer),\
@@ -366,7 +366,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_fixed_empty_list(self):
 
         class Parser(P):
-            terminal = 'list'
+            terminal('list')
 
             list =\
                 ('list_of_letters', placeholder_reducer),\
@@ -382,7 +382,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_shift_reduce_dangling_else(self):
 
         class Parser(P):
-            terminal = 'stat'
+            terminal('stat')
 
             stat =\
                 ('IF stat ELSE stat', placeholder_reducer),\
@@ -399,7 +399,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_fixed_dangling_else(self):
 
         class Parser(P):
-            terminal = 'stat'
+            terminal('stat')
 
             stat = \
                 ('IF stat ELSE stat SEMICOLON', placeholder_reducer),\
@@ -413,7 +413,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_shift_reduce_arithmetic(self):
 
         class Parser(P):
-            terminal = 'exp'
+            terminal('exp')
 
             exp =\
                 ('exp PLUS exp', placeholder_reducer),\
@@ -434,7 +434,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_fixed_arithmetic(self):
 
         class Parser(P):
-            terminal = 'exp'
+            terminal('exp')
 
             exp =\
                 ('factor PLUS factor', placeholder_reducer),\
@@ -455,7 +455,7 @@ class ParserTestConflicts(unittest.TestCase):
     def test_reduction_cycle(self):
 
         class Parser(P):
-            terminal = 'A'
+            terminal('A')
 
             A = 'B', placeholder_reducer
             B = 'C', placeholder_reducer
@@ -479,7 +479,7 @@ class ParserTestBuild(unittest.TestCase):
 
     def test_terminal_in_rules(self):
         class Parser(P):
-            terminal = 'B'
+            terminal('B')
 
             A = 'a', placeholder_reducer
 
@@ -490,7 +490,7 @@ class ParserTestReset(unittest.TestCase):
 
     def test_reset(self):
         class Parser(P):
-            terminal = 'start'
+            terminal('start')
 
             start = 'a b c', lambda *args: 'success'
 

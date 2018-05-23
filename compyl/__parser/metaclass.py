@@ -4,7 +4,10 @@ from compyl.__parser.error import ParserSyntaxError
 class RuleHarvester:
 
     def __init__(self, *args, **kwargs):
-        self.dict = {}
+        # self.dict contain function immediately accessible in class scope to add terminals
+        self.dict = {
+            'terminal': lambda *terminals: self.terminals.extend(terminals)
+        }
         self.parser_rules = {}
         self.terminals = []
         super().__init__(*args, **kwargs)
@@ -37,15 +40,7 @@ class RuleHarvester:
 
     def _add_rule_item(self, key, value):
 
-        # Manage special keywords
-        if key == 'terminal':
-            if not self.terminals:
-                self.terminals = value if isinstance(value, (list, tuple)) else [value]
-            else:
-                raise ParserSyntaxError("duplicate 'terminal' keyword")
-
-        # Otherwise the attribute must be reduction rule
-        elif isinstance(value, (list,tuple)):
+        if isinstance(value, (list, tuple)):
             # Each rule must be a tuple (string, callable)
             # value is either a single such tuple or a list/tuple of those
 
