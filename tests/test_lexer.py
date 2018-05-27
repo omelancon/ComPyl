@@ -213,10 +213,14 @@ class LexerTestRegexp(unittest.TestCase):
 
         lexer = L()
 
-        lexer.read('a\n')
+        lexer.read('a\U0010FFFF\n')
 
         tk = lexer.lex()
         self.assertEqual(tk.value, 'a')
+
+        tk = lexer.lex()
+        self.assertEqual(tk.value, '\U0010FFFF')
+
         self.assertRaises(LexerError, lexer.lex)
 
     def test_match_any(self):
@@ -225,8 +229,8 @@ class LexerTestRegexp(unittest.TestCase):
 
         lexer = L()
 
-        token_values = get_token_stream_values(lexer, '&F=\n')
-        self.assertEqual(token_values, ['&', 'F', '=', '\n'])
+        token_values = get_token_stream_values(lexer, '&F=\n\U0010FFFF')
+        self.assertEqual(token_values, ['&', 'F', '=', '\n', '\U0010FFFF'])
 
     def test_match_kleene(self):
         # The x before the MANY_A rule is needed as regexp must have minimal length over 0
