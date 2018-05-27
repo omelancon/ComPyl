@@ -23,6 +23,8 @@ from compyl.__lexer.errors import RegexpParsingError
 # . => (0,9)|(11,255)   this one is a demonstration of how the interval notation works, since . means anything but \n
 #                       we convert it to any ascii value that is not \n (10)
 
+MAX_UNICODE = 0x10ffff
+
 
 class _RegexpTreeException(Exception):
     pass
@@ -295,12 +297,12 @@ class EscapeSequence(CharSet):
 
 class Dot(CharSet):
     def __init__(self, value):
-        super().__init__(*[(0, 9), (11, 255)])
+        super().__init__(*[(0, 9), (11, MAX_UNICODE)])
 
 
 class Any(CharSet):
     def __init__(self, value):
-        super().__init__((0, 255))
+        super().__init__((0, MAX_UNICODE))
 
 
 class Set(CharSet):
