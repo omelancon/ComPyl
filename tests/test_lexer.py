@@ -176,11 +176,6 @@ class LexerTestLineRule(unittest.TestCase):
             WORD = r'\w+'
             _ = r' |\t'
 
-        rules = [
-            (r'\w+', 'WORD'),
-            (r' |\t', None)
-        ]
-
         cls.lexer = L()
 
         cls.lexer_copy = copy.deepcopy(cls.lexer)
@@ -681,6 +676,38 @@ class LexerUnicode(unittest.TestCase):
         out = test_regexp_on_buffer(pattern, buffer)
 
         self.assertEqual(out, [buffer])
+
+class VowelCounter(unittest.TestCase):
+    def test_vowel_counter(self):
+        def vowel_counter(t):
+            t.params['vowels'] += 1
+
+        def reset_lexer_params(t):
+            t.params['vowels'] = 0
+
+        def store_vowels(t):
+            return {'vowels': t.params['vowels']}
+
+        class VowelLexer(Lexer):
+            line_rule('\n')
+            params({'vowels': 0})
+            terminal_actions(
+                (reset_lexer_params, 'always')
+            )
+
+            _ = r'[aeiouy]', vowel_counter, 'trigger_on_contain'
+            WORD = r'[a-z]+', store_vowels
+            COMMENT = r'/--_*--/', 'non_greedy'
+            _ = ' '
+
+        lexer = VowelLexer()
+        word, comment, woard = get_token_stream(lexer, 'word /--and a comment--/ woard')
+
+        self.assertDictEqual(word.params, {'vowels': 1})
+        self.assertIsNone(comment.params)
+        self.assertDictEqual(woard.params, {'vowels': 2})
+
+
 
 
 if __name__ == '__main__':

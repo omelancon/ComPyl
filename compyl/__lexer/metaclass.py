@@ -13,8 +13,7 @@ def get_callable_terminal_token(token, instruction):
 
     else:
         def _call_instruction(*args):
-            instruction(*args)
-            return token
+            return token, instruction(*args)
 
         return _call_instruction
 
