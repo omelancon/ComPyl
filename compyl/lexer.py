@@ -35,7 +35,7 @@ class Token:
             return self.type == other.type
 
         else:
-            raise NotImplemented
+            return NotImplemented
 
 
 class Lexer(metaclass=MetaLexer):

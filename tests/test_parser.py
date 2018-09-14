@@ -22,6 +22,17 @@ def get_string_of_instructions_reducer(reduce_marker):
     return lambda *args: ' '.join([a.value if hasattr(a, 'value') else str(a) for a in args] + [reduce_marker])
 
 
+class ComparableNode:
+    def __eq__(self, other):
+        return type(self) == type(other) and self.__dict__ == other.__dict__
+
+class LooseComparisonToken(Token):
+    """Mimicks the Parser.Token class to only check type and value attributes
+    This allows comparison of mocked Parser.Token and Lexer.Token only by their attribute and not types"""
+    def __eq__(self, other):
+        return self.type == other.type and self.value == other.value
+
+
 class Start:
     def __init__(self, a, b, end):
         self.a = a
@@ -525,6 +536,81 @@ class ParserTestSave(ParserTestBasic):
 
     def tearDown(self):
         self.__class__.parser = P.load(self.parser_filename)
+
+
+class ParserRealExample(unittest.TestCase):
+    def test_real_example(self):
+        import compyl
+
+        class Lexer(compyl.Lexer):
+            line_rule('\n')
+
+            IF = r'if'
+            THEN = r'then'
+            ELSE = r'else'
+            END = r'end'
+            EQUAL = r'='
+            INT = r'[0-9]+'
+            VAR = r'[a-zA-Z]+'
+            _ = '[ \t]'
+
+        lexer = Lexer()
+
+        class Code(ComparableNode):
+            def __init__(self, stats):
+                self.stats = stats
+
+        class If(ComparableNode):
+            def __init__(self, *args):
+                self.cond = args[1]
+                self.if_stat = args[3]
+                self.else_stat = args[4]
+
+        class Declaration(ComparableNode):
+            def __init__(self, *args):
+                self.var = args[0]
+                self.value = args[2]
+
+        import compyl
+
+        class Parser(compyl.Parser):
+            terminal('code')
+
+            code = 'stats', Code,
+            stats = \
+                ('stat', lambda x: [x]), \
+                ('stat stats', lambda x, y: [x] + y)
+            stat = \
+                ('IF VAR THEN stat else_block? END', If), \
+                ('VAR EQUAL INT', Declaration)
+            else_block = 'ELSE stat', lambda x, y: y
+
+        parser = Parser()
+
+        lexer.read("""
+        x = 1
+        if x then y = 1 else y = 4 end
+        """)
+
+        token = lexer.lex()  # Token object
+
+        while token:
+            parser.parse(token)
+            token = lexer.lex()  # Token object
+
+        output = parser.end()  # Code object
+
+        Token = LooseComparisonToken
+
+        expected = Code([
+            Declaration(Token('VAR', 'x'), Token('EQUAL', '='), Token('INT', '1')),
+            If(Token('IF', 'if'), Token('VAR', 'x'), Token('THEN', 'then'),
+               Declaration(Token('VAR', 'y'), Token('Equal', '='), Token('INT', '1')),
+               Declaration(Token('VAR', 'y'), Token('Equal', '='), Token('INT', '4')),
+               Token('END', 'end'))
+        ])
+
+        self.assertEqual(output, expected)
 
 
 if __name__ == '__main__':

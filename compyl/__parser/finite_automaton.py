@@ -22,10 +22,10 @@ class Token:
 
     def __eq__(self, other):
         if isinstance(other, Token):
-            return self.type == other.type
+            return self.type == other.type and self.value == other.value
 
         else:
-            raise NotImplemented
+            return NotImplemented
 
 
 class DFA:

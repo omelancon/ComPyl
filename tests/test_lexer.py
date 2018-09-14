@@ -692,7 +692,7 @@ class VowelCounter(unittest.TestCase):
             line_rule('\n')
             params({'vowels': 0})
             terminal_actions(
-                (reset_lexer_params, 'always')
+                reset_lexer_params
             )
 
             _ = r'[aeiouy]', vowel_counter, 'trigger_on_contain'
@@ -706,8 +706,6 @@ class VowelCounter(unittest.TestCase):
         self.assertDictEqual(word.params, {'vowels': 1})
         self.assertIsNone(comment.params)
         self.assertDictEqual(woard.params, {'vowels': 2})
-
-
 
 
 if __name__ == '__main__':
