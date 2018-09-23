@@ -176,6 +176,16 @@ class Lexer(metaclass=MetaLexer):
 
         return dup
 
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        token = self.lex()
+        if token:
+            return token
+        else:
+            raise StopIteration
+
     def read(self, buffer):
         if not isinstance(buffer, str):
             raise LexerError("buffer must be a string")
@@ -235,9 +245,7 @@ class Lexer(metaclass=MetaLexer):
             raise LexerError("The unpickled object from " + path + " is not a Lexer")
 
     def lex(self):
-        try:
-            _ = self.buffer[self.pos]
-        except IndexError:
+        if self.pos >= len(self.buffer):
             return None
 
         # Start at empty state of DFA

@@ -592,11 +592,8 @@ class ParserRealExample(unittest.TestCase):
         if x then y = 1 else y = 4 end
         """)
 
-        token = lexer.lex()  # Token object
-
-        while token:
+        for token in lexer:
             parser.parse(token)
-            token = lexer.lex()  # Token object
 
         output = parser.end()  # Code object
 
