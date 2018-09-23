@@ -9,15 +9,7 @@ FAIL = False
 
 def get_token_stream(lexer, buffer):
     lexer.read(buffer)
-    tk_list = []
-
-    tk = lexer.lex()
-
-    while tk:
-        tk_list.append(tk)
-        tk = lexer.lex()
-
-    return tk_list
+    return [token for token in lexer]
 
 
 def get_token_stream_types(lexer, buffer):
