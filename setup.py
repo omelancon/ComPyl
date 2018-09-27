@@ -1,5 +1,5 @@
 from setuptools import setup, find_packages
-from .compyl import __version__
+from compyl import __version__
 
 setup(name='compyl',
       packages=find_packages(exclude=("tests",)),
