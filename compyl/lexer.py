@@ -296,6 +296,9 @@ class Lexer(metaclass=MetaLexer):
         value = self.buffer[init_pos:self.pos]
         ignore = False
 
+        # OBSOLETE WARNING: terminal_token should now only be a callable
+        # Although, to go around the class syntax we might still allow that for the future
+
         # A None terminal token represents an ignored state (usually spaces and linebreaks)
         if terminal_token is None:
             ignore = True

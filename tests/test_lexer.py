@@ -699,6 +699,25 @@ class VowelCounter(unittest.TestCase):
         self.assertIsNone(comment.params)
         self.assertDictEqual(woard.params, {'vowels': 2})
 
+class IgnoredSequences(unittest.TestCase):
+    def test_ignore_comments(self):
+
+        class CommentLexer(Lexer):
+            line_rule('\n')
+
+            _ = r'#.*'
+            VAR = r'\w+'
+
+        lexer = CommentLexer()
+
+        buffer = 'a#thisshouldbeignored\nnotthis\n#and this'
+
+        tokens = get_token_stream(lexer, buffer)
+
+        self.assertEqual(tokens[0].value, 'a')
+        self.assertEqual(tokens[1].value, 'notthis')
+        self.assertTrue(len(tokens) == 2)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

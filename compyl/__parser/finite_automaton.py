@@ -117,6 +117,7 @@ class DFA:
 
         reducer_args = [token if isinstance(token, lexer.Token) else token.value for node, token in
                         self.stack[-length:]] if length > 0 else []
+
         reduced_value = reducer(*reducer_args)
 
         new_token = Token(token_type, reduced_value)

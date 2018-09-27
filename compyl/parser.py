@@ -11,21 +11,6 @@ __all__ = ['Parser', 'ParserError', 'ParserSyntaxError', 'ParserBuildError', 'Gr
 
 
 # ======================================================================================================================
-# Parser decorators
-# ======================================================================================================================
-
-
-def _require_dfa(fn):
-    def wrapped_fn(self, *args, **kwargs):
-        if not self.dfa:
-            raise ParserError
-        else:
-            return fn(self, *args, **kwargs)
-
-    return wrapped_fn
-
-
-# ======================================================================================================================
 # Parser Main Class
 # ======================================================================================================================
 
@@ -95,7 +80,6 @@ class Parser(metaclass=MetaParser):
         else:
             raise ParserError("The unpickled object from " + path + " is not a Parser")
 
-    @_require_dfa
     def parse(self, token):
         if token:
             self.dfa.push(token)
@@ -103,7 +87,6 @@ class Parser(metaclass=MetaParser):
         else:
             return self.end()
 
-    @_require_dfa
     def end(self):
         return self.dfa.end()
 
