@@ -3,7 +3,9 @@ class LexerError(Exception):
 
 
 class LexerSyntaxError(LexerError):
-    pass
+    def __init__(self, *args, lineno=None, pos=None):
+        self.lineno, self.pos = lineno, pos
+        super().__init__(*args)
 
 
 class LexerBuildError(LexerError):

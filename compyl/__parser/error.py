@@ -7,7 +7,9 @@ class ParserBuildError(ParserError):
 
 
 class ParserSyntaxError(ParserError):
-    pass
+    def __init__(self, *args, token=None):
+        self.token = token
+        super().__init__(*args)
 
 
 class GrammarError(ParserBuildError):

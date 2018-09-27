@@ -87,7 +87,7 @@ class DFA:
                     self.done = True
                     self.output = token.value
                 else:
-                    raise ParserSyntaxError
+                    raise
         elif token is not None:
             raise ParserSyntaxError('Parser was done but was given extra token')
 
@@ -98,7 +98,7 @@ class DFA:
     def _push(self, token):
         lookout = token.type if token else None
         if lookout not in self.current_state.transitions:
-            raise ParserSyntaxError
+            raise ParserSyntaxError(token)
 
         transition = self.current_state.transitions[lookout]
 

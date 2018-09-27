@@ -284,7 +284,7 @@ class Lexer(metaclass=MetaLexer):
                 try:
                     terminal_token = self.dfa.get_current_state_terminal()
                 except NodeIsNotTerminalState:
-                    raise LexerSyntaxError("Syntax error at line %s" % self.lineno)
+                    raise LexerSyntaxError("Syntax error at line %s" % self.lineno, lineno=self.lineno, pos=self.pos)
 
                 break
 
