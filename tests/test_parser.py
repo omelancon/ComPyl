@@ -5,6 +5,7 @@ from compyl.__parser.finite_automaton import Token
 from compyl import ParserBuildError, ParserSyntaxError, GrammarError
 from compyl import Parser as P
 
+
 # =========================================================
 # Helper tokens and functions
 # =========================================================
@@ -26,9 +27,11 @@ class ComparableNode:
     def __eq__(self, other):
         return type(self) == type(other) and self.__dict__ == other.__dict__
 
+
 class LooseComparisonToken(Token):
     """Mimicks the Parser.Token class to only check type and value attributes
     This allows comparison of mocked Parser.Token and Lexer.Token only by their attribute and not types"""
+
     def __eq__(self, other):
         return self.type == other.type and self.value == other.value
 
@@ -79,8 +82,8 @@ class ParserTestBasic(unittest.TestCase):
     def setUpClass(cls):
 
         class Parser(P, terminal='start'):
-            start =\
-                ('TOKEN_A TOKEN_B end?', Start),\
+            start = \
+                ('TOKEN_A TOKEN_B end?', Start), \
                 ('TOKEN_A TOKEN_C end?', Start)
             end = ('TOKEN_C TOKEN_D', End)
 
@@ -156,19 +159,18 @@ class ParserTestAdvanced(unittest.TestCase):
 
     def test_advanced_grammar(self):
         class Parser(P, terminal='A'):
-
-            A =\
-                ('B A', get_string_of_instructions_reducer('A1')),\
-                ('C A', get_string_of_instructions_reducer('A2')),\
+            A = \
+                ('B A', get_string_of_instructions_reducer('A1')), \
+                ('C A', get_string_of_instructions_reducer('A2')), \
                 ('e', get_string_of_instructions_reducer('A3'))
-            B =\
-                ('a b c', get_string_of_instructions_reducer('B1')),\
+            B = \
+                ('a b c', get_string_of_instructions_reducer('B1')), \
                 ('b c? a', get_string_of_instructions_reducer('B2'))
-            C =\
-                ('x Y B', get_string_of_instructions_reducer('C1')),\
+            C = \
+                ('x Y B', get_string_of_instructions_reducer('C1')), \
                 ('x y d', get_string_of_instructions_reducer('C2'))
-            Y =\
-                ('', get_string_of_instructions_reducer('Y1')),\
+            Y = \
+                ('', get_string_of_instructions_reducer('Y1')), \
                 ('y', get_string_of_instructions_reducer('Y2'))
 
         parser = Parser()
@@ -202,12 +204,11 @@ class ParserTestAdvanced(unittest.TestCase):
         """
 
         class Parser(P, terminal='A'):
-
             A = 'B e', get_string_of_instructions_reducer('A1')
             B = 'C END', get_string_of_instructions_reducer('B1')
             C = 'c', get_string_of_instructions_reducer('C1')
-            END =\
-                ('', get_string_of_instructions_reducer('END1')),\
+            END = \
+                ('', get_string_of_instructions_reducer('END1')), \
                 ('end', get_string_of_instructions_reducer('END2'))
 
         parser = Parser()
@@ -225,7 +226,6 @@ class ParserTestAdvanced(unittest.TestCase):
     def test_sequence_of_empty_rules(self):
 
         class Parser(P, terminal='start'):
-
             start = 'A B C', get_string_of_instructions_reducer('start1')
             A = '', get_string_of_instructions_reducer('A1')
             B = '', get_string_of_instructions_reducer('B1')
@@ -329,7 +329,7 @@ class ParserTestConflicts(unittest.TestCase):
 
         class Parser(P, terminal='start'):
 
-            start = ('a', placeholder_reducer),\
+            start = ('a', placeholder_reducer), \
                     ('b', placeholder_reducer)
             a = 'A B C', placeholder_reducer
             b = 'A B C', placeholder_reducer
@@ -346,14 +346,14 @@ class ParserTestConflicts(unittest.TestCase):
 
         class Parser(P, terminal='list'):
 
-            list =\
-                ('list_of_letters', placeholder_reducer),\
+            list = \
+                ('list_of_letters', placeholder_reducer), \
                 ('list_of_numbers', placeholder_reducer)
-            list_of_letters =\
-                ('', placeholder_reducer),\
+            list_of_letters = \
+                ('', placeholder_reducer), \
                 ('LETTER list_of_letters', placeholder_reducer)
-            list_of_numbers =\
-                ('', placeholder_reducer),\
+            list_of_numbers = \
+                ('', placeholder_reducer), \
                 ('NUMBER list_of_numbers', placeholder_reducer)
 
         try:
@@ -368,8 +368,8 @@ class ParserTestConflicts(unittest.TestCase):
 
         class Parser(P, terminal='list'):
 
-            list =\
-                ('list_of_letters', placeholder_reducer),\
+            list = \
+                ('list_of_letters', placeholder_reducer), \
                 ('list_of_numbers', placeholder_reducer)
             list_of_letters = 'LETTER list_of_letters?', placeholder_reducer
             list_of_numbers = 'NUMBER list_of_numbers?', placeholder_reducer
@@ -383,8 +383,8 @@ class ParserTestConflicts(unittest.TestCase):
 
         class Parser(P, terminal='stat'):
 
-            stat =\
-                ('IF stat ELSE stat', placeholder_reducer),\
+            stat = \
+                ('IF stat ELSE stat', placeholder_reducer), \
                 ('IF stat', placeholder_reducer)
 
         try:
@@ -400,7 +400,7 @@ class ParserTestConflicts(unittest.TestCase):
         class Parser(P, terminal='stat'):
 
             stat = \
-                ('IF stat ELSE stat SEMICOLON', placeholder_reducer),\
+                ('IF stat ELSE stat SEMICOLON', placeholder_reducer), \
                 ('IF stat SEMICOLON', placeholder_reducer)
 
         try:
@@ -412,11 +412,11 @@ class ParserTestConflicts(unittest.TestCase):
 
         class Parser(P, terminal='exp'):
 
-            exp =\
-                ('exp PLUS exp', placeholder_reducer),\
-                ('exp TIMES exp', placeholder_reducer),\
-                ('LEFT_PAR exp RIGHT_PAR', placeholder_reducer),\
-                ('NUMBER', placeholder_reducer),\
+            exp = \
+                ('exp PLUS exp', placeholder_reducer), \
+                ('exp TIMES exp', placeholder_reducer), \
+                ('LEFT_PAR exp RIGHT_PAR', placeholder_reducer), \
+                ('NUMBER', placeholder_reducer), \
                 ('VARIABLE', placeholder_reducer)
 
         try:
@@ -431,15 +431,15 @@ class ParserTestConflicts(unittest.TestCase):
     def test_fixed_arithmetic(self):
 
         class Parser(P, terminal='exp'):
-            exp =\
-                ('factor PLUS factor', placeholder_reducer),\
+            exp = \
+                ('factor PLUS factor', placeholder_reducer), \
                 ('factor', placeholder_reducer)
-            factor =\
-                ('atomic TIMES atomic', placeholder_reducer),\
+            factor = \
+                ('atomic TIMES atomic', placeholder_reducer), \
                 ('atomic', placeholder_reducer)
-            atomic =\
-                ('NUMBER', placeholder_reducer),\
-                ('VARIABLE', placeholder_reducer),\
+            atomic = \
+                ('NUMBER', placeholder_reducer), \
+                ('VARIABLE', placeholder_reducer), \
                 ('LEFT_PAR exp RIGHT_PAR', placeholder_reducer)
 
         try:
@@ -587,4 +587,3 @@ class ParserRealExample(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
-

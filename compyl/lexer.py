@@ -140,13 +140,13 @@ class Lexer(metaclass=MetaLexer):
         self.params = copy.deepcopy(self.__params__)
 
         self.terminal_actions = []
-        self.parse_terminal_actions(self.__terminal_actions__)
+        self._parse_terminal_actions(self.__terminal_actions__)
 
         # Build the dfa
         if _dfa is not None:
             self.dfa = _dfa
         else:
-            self._build()
+            self.dfa = DFA(rules=self.rules)
 
     def __copy__(self):
         """
@@ -196,7 +196,7 @@ class Lexer(metaclass=MetaLexer):
         self.buffer = self.buffer[self.pos:]
         self.pos = 0
 
-    def parse_terminal_actions(self, actions):
+    def _parse_terminal_actions(self, actions):
         for action in actions:
             if isinstance(action, tuple) and len(action) == 2:
                 action_fn = action[0]
@@ -225,9 +225,6 @@ class Lexer(metaclass=MetaLexer):
             else:
                 raise LexerError("""terminal action must be of type (function, string) tuple,
                     the string can take values 'always', 'only_ignored' or 'only_tokens'""")
-
-    def _build(self):
-        self.dfa = DFA(rules=self.rules)
 
     def save(self, filename="lexer.p"):
         with open(filename, "wb") as file:

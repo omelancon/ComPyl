@@ -24,7 +24,8 @@ class Parser(metaclass=MetaParser):
         if _dfa is not None:
             self.dfa = _dfa
         else:
-            self.build()
+            formatted_rules = format_rules(self.rules)
+            self.dfa = DFA(formatted_rules, self.terminals)
 
     def __copy__(self):
         """
@@ -44,19 +45,6 @@ class Parser(metaclass=MetaParser):
         dup = type(self)(_dfa=copy.deepcopy(self.dfa))
 
         return dup
-
-    def set_terminals(self, terminals):
-        self.terminals = terminals
-
-    def add_rules(self, rules):
-        if rules_are_valid(rules):
-            self.rules.update(rules)
-        else:
-            raise ParserError("Invalid Rule Format")
-
-    def build(self):
-        formatted_rules = format_rules(self.rules)
-        self.dfa = DFA(formatted_rules, self.terminals)
 
     def reset(self):
         self.dfa.reset()

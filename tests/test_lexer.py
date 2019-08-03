@@ -158,7 +158,6 @@ class LexerTestLineRule(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         class L(Lexer, line_rule='\n'):
-
             WORD = r'\w+'
             _ = r' |\t'
 
@@ -633,7 +632,6 @@ class LexerUnicode(unittest.TestCase):
     """
 
     def test_single_unicode(self):
-
         for x in ('\U00000041', '\U00000F00', '\U000F0000', '\U0010FFFF'):
             out = test_regexp_on_buffer(x, x)
             self.assertEqual(out, [x])
@@ -645,6 +643,7 @@ class LexerUnicode(unittest.TestCase):
         out = test_regexp_on_buffer(pattern, buffer)
 
         self.assertEqual(out, [buffer])
+
 
 class VowelCounter(unittest.TestCase):
     def test_vowel_counter(self):
@@ -670,9 +669,9 @@ class VowelCounter(unittest.TestCase):
         self.assertIsNone(comment.params)
         self.assertDictEqual(woard.params, {'vowels': 2})
 
+
 class IgnoredSequences(unittest.TestCase):
     def test_ignore_comments(self):
-
         class CommentLexer(Lexer, line_rule='\n'):
             _ = r'#.*'
             VAR = r'\w+'
