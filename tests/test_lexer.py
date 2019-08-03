@@ -32,9 +32,7 @@ def test_regexp_on_buffer(regexp, buffer):
 class LexerTestBasic(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        class L(Lexer):
-            line_rule('\n')
-
+        class L(Lexer, line_rule='\n'):
             WORD = r'[a-z]+'
             UNREACHABLE = 'unreachable'
             NUMBER = r'[0-9]+'
@@ -78,10 +76,7 @@ class LexerTestSpecialActions(unittest.TestCase):
         def digit_counter(t):
             t.params['digits'] += 1
 
-        class L(Lexer):
-            line_rule('\n')
-            params(letters=0, digits=0)
-
+        class L(Lexer, line_rule='\n', params={'letters': 0, 'digits': 0}):
             _ = r'[a-z]', letter_counter, 'trigger_on_contain'
             _ = r'[0-9]', digit_counter, 'trigger_on_contain'
             TOKEN = r'[a-zA-Z0-9]+'
@@ -162,8 +157,7 @@ class LexerTestController(unittest.TestCase):
 class LexerTestLineRule(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        class L(Lexer):
-            line_rule('\n')
+        class L(Lexer, line_rule='\n'):
 
             WORD = r'\w+'
             _ = r' |\t'
@@ -476,11 +470,7 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_matches(t):
             t.params['count'] += 1
 
-        class L(Lexer):
-            line_rule('\s')
-            terminal_actions(count_all_matches)
-            params({'count': 0})
-
+        class L(Lexer, line_rule='\s', terminal_actions=[count_all_matches], params={'count': 0}):
             WORD = r'\w+'
 
         lexer = L()
@@ -499,11 +489,10 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_matches_again(t):
             t.params['count'] += 1
 
-        class L(Lexer):
-            line_rule(r'\s')
-            terminal_actions(count_all_matches, count_all_matches_again)
-            params(count=0)
-
+        class L(Lexer,
+                line_rule=r'\s',
+                terminal_actions=(count_all_matches, count_all_matches_again),
+                params={'count': 0}):
             WORD = r'\w+'
 
         lexer = L()
@@ -516,11 +505,7 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_matches(t):
             t.params['count'] += 1
 
-        class L(Lexer):
-            line_rule(r'\s')
-            terminal_actions((count_all_matches, 'always'))
-            params(count=0)
-
+        class L(Lexer, line_rule=r'\s', terminal_actions=[(count_all_matches, 'always')], params={'count': 0}):
             WORD = r'\w+'
 
         lexer = L()
@@ -536,11 +521,7 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_ignored(t):
             t.params['count'] += 1
 
-        class L(Lexer):
-            line_rule(r'\s')
-            terminal_actions((count_all_ignored, 'only_ignored'))
-            params({'count': 0})
-
+        class L(Lexer, line_rule=r'\s', terminal_actions=[(count_all_ignored, 'only_ignored')], params={'count': 0}):
             WORD = r'\w+'
 
         lexer = L()
@@ -553,11 +534,7 @@ class LexerTestTerminalAction(unittest.TestCase):
         def count_all_tokens(t):
             t.params['count'] += 1
 
-        class L(Lexer):
-            line_rule(r'\s')
-            terminal_actions((count_all_tokens, 'only_tokens'))
-            params({'count': 0})
-
+        class L(Lexer, line_rule=r'\s', terminal_actions=[(count_all_tokens, 'only_tokens')], params={'count': 0}):
             WORD = r'\w+'
 
         lexer = L()
@@ -680,13 +657,7 @@ class VowelCounter(unittest.TestCase):
         def store_vowels(t):
             return {'vowels': t.params['vowels']}
 
-        class VowelLexer(Lexer):
-            line_rule('\n')
-            params({'vowels': 0})
-            terminal_actions(
-                reset_lexer_params
-            )
-
+        class VowelLexer(Lexer, line_rule='\n', params={'vowels': 0}, terminal_actions=[reset_lexer_params]):
             _ = r'[aeiouy]', vowel_counter, 'trigger_on_contain'
             WORD = r'[a-z]+', store_vowels
             COMMENT = r'/--_*--/', 'non_greedy'
@@ -702,9 +673,7 @@ class VowelCounter(unittest.TestCase):
 class IgnoredSequences(unittest.TestCase):
     def test_ignore_comments(self):
 
-        class CommentLexer(Lexer):
-            line_rule('\n')
-
+        class CommentLexer(Lexer, line_rule='\n'):
             _ = r'#.*'
             VAR = r'\w+'
 

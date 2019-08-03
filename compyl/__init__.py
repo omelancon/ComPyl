@@ -4,7 +4,7 @@ from compyl.lexer import Lexer, Token
 from compyl.__parser.error import ParserError, ParserSyntaxError, ParserBuildError, GrammarError
 from compyl.parser import Parser
 
-__version__ = '0.2.1'
+__version__ = '0.3.0'
 
 __all__ = ['Parser', 'ParserError', 'ParserSyntaxError', 'ParserBuildError', 'GrammarError',
            'Token', 'Lexer', 'LexerError', 'LexerSyntaxError', 'LexerBuildError', 'RegexpParsingError']

@@ -3,13 +3,12 @@ from compyl.__parser.error import ParserSyntaxError
 
 class RuleHarvester:
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, terminal=None, **kwargs):
         # self.dict contain function immediately accessible in class scope to add terminals
-        self.dict = {
-            'terminal': lambda *terminals: self.terminals.extend(terminals)
-        }
+        self.dict = {}
         self.parser_rules = {}
-        self.terminals = []
+        terminal = [terminal] if isinstance(terminal, str) else terminal
+        self.terminals = [] if terminal is None else terminal
         super().__init__(*args, **kwargs)
 
     def __setitem__(self, key, value):
@@ -59,14 +58,14 @@ class RuleHarvester:
             raise ParserSyntaxError('ill-formatted rule: {}'.format(key))
 
 class MetaParser(type):
-    def __prepare__(name, bases):
+    def __prepare__(name, bases, **kwargs):
         if not bases:
             return dict()
 
         else:
-            return RuleHarvester()
+            return RuleHarvester(**kwargs)
 
-    def __new__(cls, name, bases, name_space):
+    def __new__(cls, name, bases, name_space, **kwargs):
 
         # MetaParser is only meant to be used for the Parser class, so we allow the creation of the class as a
         # way to inherit the metaclass, but any other inheritance will not return a class.

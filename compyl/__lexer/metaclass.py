@@ -25,16 +25,12 @@ class RuleHarvester():
     It then returns special keys __rules__, __terminal_tokens__ and __params__
     Used in __prepare__ method of MetaLexer to gather rules and bunch them in a single parsed list
     """
-    def __init__(self, *args, **kwargs):
-        # The initial dict contains functions accessible in the class scope to set non-rule properties
-        self.dict = {
-            'terminal_actions': lambda *actions: self.terminal_actions.extend(actions),
-            'params': lambda params=None, **kwargs: self.params.update(params or {}, **kwargs),
-            'line_rule': lambda pattern: self.lexer_rules.extend(self._get_line_rule_item(pattern))
-        }
-        self.lexer_rules = []
-        self.terminal_actions = []
-        self.params = {}
+    def __init__(self, *args, terminal_actions=None, params=None, line_rule=None, **kwargs):
+        self.dict = {}
+        self.lexer_rules = [] if line_rule is None else self._get_line_rule_item(line_rule)
+        self.terminal_actions = [] if terminal_actions is None else terminal_actions
+        self.params = {} if params is None else params
+
         super().__init__(*args, **kwargs)
 
     def __setitem__(self, key, value):
@@ -115,14 +111,14 @@ class RuleHarvester():
 
 
 class MetaLexer(type):
-    def __prepare__(name, bases):
+    def __prepare__(name, bases, **kwargs):
         if not bases:
             return dict()
 
         else:
-            return RuleHarvester()
+            return RuleHarvester(**kwargs)
 
-    def __new__(cls, name, bases, name_space):
+    def __new__(cls, name, bases, name_space, **kwargs):
 
         # MetaLexer is only meant to be used for the Lexer class below, so we allow the creation of the class as a
         # way to inherit the metaclass, but any other inheritance will not return a class.
@@ -137,7 +133,8 @@ class MetaLexer(type):
             # WARNING: When unpickling with dill, name_space is actually a dict with the keys __params__, __rules__ and
             # __terminal_actions__ parsed already. This is fine, but we need to make sure that the cast from
             # RuleHarvester to to dict will always be idempotent, i.e. dict(dict(name_space)) == dict(name_space)
-            return super().__new__(cls, name, bases, dict(name_space))
+            lexer_cls = super().__new__(cls, name, bases, dict(name_space))
+            return lexer_cls
 
         else:
             raise TypeError('Lexer cannot be inherited along with other classes')
